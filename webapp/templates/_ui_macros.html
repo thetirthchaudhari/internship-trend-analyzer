@@ -1,0 +1,72 @@
+{% macro ui_icon(name, class_name="") -%}
+<svg class="{{ class_name }}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    {% if name == "dashboard" %}
+        <rect x="3.5" y="3.5" width="7" height="7" rx="2"></rect>
+        <rect x="13.5" y="3.5" width="7" height="11" rx="2"></rect>
+        <rect x="3.5" y="13.5" width="7" height="7" rx="2"></rect>
+        <rect x="13.5" y="17.5" width="7" height="3" rx="1.5"></rect>
+    {% elif name == "scrape" %}
+        <path d="M5 7h14"></path>
+        <path d="M7 5v4"></path>
+        <path d="M17 5v4"></path>
+        <rect x="4" y="9" width="16" height="10" rx="3"></rect>
+        <path d="M9 13h6"></path>
+        <path d="M12 10.5v5"></path>
+    {% elif name == "jobs" %}
+        <rect x="5" y="4" width="14" height="16" rx="3"></rect>
+        <path d="M9 4.5v3"></path>
+        <path d="M15 4.5v3"></path>
+        <path d="M8 11h8"></path>
+        <path d="M8 15h5"></path>
+    {% elif name == "search" %}
+        <circle cx="11" cy="11" r="6"></circle>
+        <path d="M20 20l-4.2-4.2"></path>
+    {% elif name == "prediction" %}
+        <path d="M4 18h16"></path>
+        <path d="M6.5 15l3.2-3.6 3 2.3 4.8-6.2"></path>
+        <circle cx="18" cy="7.5" r="1.5"></circle>
+    {% elif name == "about" %}
+        <circle cx="12" cy="8" r="3"></circle>
+        <path d="M6 19c1.2-3 3.4-4.5 6-4.5s4.8 1.5 6 4.5"></path>
+    {% elif name == "database" %}
+        <ellipse cx="12" cy="6.5" rx="6.5" ry="2.8"></ellipse>
+        <path d="M5.5 6.5v5c0 1.5 2.9 2.8 6.5 2.8s6.5-1.3 6.5-2.8v-5"></path>
+        <path d="M5.5 11.5v5c0 1.5 2.9 2.8 6.5 2.8s6.5-1.3 6.5-2.8v-5"></path>
+    {% elif name == "signal" %}
+        <path d="M4 13h3l2-5 4 10 2-5h5"></path>
+    {% elif name == "source" %}
+        <circle cx="7" cy="12" r="2"></circle>
+        <circle cx="17" cy="7" r="2"></circle>
+        <circle cx="17" cy="17" r="2"></circle>
+        <path d="M8.8 11l6.4-3"></path>
+        <path d="M8.8 13l6.4 3"></path>
+    {% elif name == "workflow" %}
+        <rect x="3.5" y="5" width="6.5" height="5" rx="1.8"></rect>
+        <rect x="13.5" y="5" width="7" height="5" rx="1.8"></rect>
+        <rect x="8.5" y="14" width="7" height="5" rx="1.8"></rect>
+        <path d="M10 7.5h3.5"></path>
+        <path d="M12 10v4"></path>
+    {% elif name == "rank" %}
+        <path d="M6 18V9"></path>
+        <path d="M12 18V6"></path>
+        <path d="M18 18v-4"></path>
+    {% elif name == "salary" %}
+        <path d="M12 4v16"></path>
+        <path d="M16 7.5c0-1.7-1.8-3-4-3s-4 1.3-4 3 1.8 3 4 3 4 1.3 4 3-1.8 3-4 3-4-1.3-4-3"></path>
+    {% elif name == "contact" %}
+        <rect x="4" y="6" width="16" height="12" rx="2.5"></rect>
+        <path d="M5 8l7 5 7-5"></path>
+    {% elif name == "evidence" %}
+        <rect x="5" y="4" width="14" height="16" rx="3"></rect>
+        <path d="M8 9h8"></path>
+        <path d="M8 13h8"></path>
+        <path d="M8 17h4"></path>
+    {% elif name == "filter" %}
+        <path d="M4 6h16"></path>
+        <path d="M7 12h10"></path>
+        <path d="M10 18h4"></path>
+    {% else %}
+        <circle cx="12" cy="12" r="7"></circle>
+    {% endif %}
+</svg>
+{%- endmacro %}

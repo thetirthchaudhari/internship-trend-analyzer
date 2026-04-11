@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
 {% block title %}Skill Search · Internship Trend Analyzer{% endblock %}
 
 {% block content %}
@@ -6,17 +7,22 @@
     <section class="page-header split-header">
         <div>
             <div class="eyebrow">Skill-based discovery</div>
-            <h1 class="page-title">Find roles that actually match the stack you want</h1>
+            <h1 class="page-title">Use the matching layer to surface roles that genuinely fit your stack.</h1>
             <p class="page-lead">
-                Search by comma-separated skills and the app will rank jobs using exact overlap plus text similarity.
+                Search by comma-separated skills and the app ranks stored roles using explicit overlap plus description-level text similarity.
             </p>
         </div>
 
         <div class="info-panel">
-            <div class="panel-kicker">How ranking works</div>
+            <div class="panel-kicker">{{ ui_icon('rank', 'panel-inline-icon') }} How ranking works</div>
             <p>
                 Jobs score higher when more of your skills appear in the title, description, search query, and role context.
             </p>
+            <div class="token-row">
+                <span class="token accent">Overlap score</span>
+                <span class="token soft">Text similarity</span>
+                <span class="token warm">Role context</span>
+            </div>
         </div>
     </section>
 
@@ -26,9 +32,9 @@
 
     <section class="panel">
         <div class="panel-header">
-            <div class="panel-kicker">Search input</div>
+            <div class="panel-kicker">{{ ui_icon('search', 'panel-inline-icon') }} Search input</div>
             <h2 class="panel-title">Describe the skills you care about</h2>
-            <p class="panel-copy">Try combinations like Python, SQL, TensorFlow, MLOps, NLP, backend, or data analysis.</p>
+            <p class="panel-copy">Try combinations like Python, SQL, TensorFlow, MLOps, NLP, backend, or data analysis to test the ranking flow against the live stored dataset.</p>
         </div>
 
         <form method="post" class="form-grid search-form-layout">
@@ -47,6 +53,21 @@
                 <button type="submit" class="button button-primary full-width">Search jobs</button>
             </div>
         </form>
+
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('rank', 'insight-icon') }} Ranking signal</div>
+                <p>This module exists to prove the project is not just scraping, but also interpreting stored roles with matching logic.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('evidence', 'insight-icon') }} Evidence surface</div>
+                <p>Matched skills, score panels, and description excerpts make the result list feel like an explainable retrieval product.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('database', 'insight-icon') }} Reused storage</div>
+                <p>The same stored data powers inventory browsing here, reinforcing the platform’s multi-module product scope.</p>
+            </article>
+        </div>
     </section>
 
     {% if results %}
@@ -54,7 +75,8 @@
             <div class="section-heading">
                 <div>
                     <div class="eyebrow">Results</div>
-                    <h2 class="section-title">{{ results|length }} matching role{{ '' if results|length == 1 else 's' }}</h2>
+                    <h2 class="section-title section-title-row">{{ ui_icon('search', 'section-icon') }} {{ results|length }} matching role{{ '' if results|length == 1 else 's' }}</h2>
+                    <p class="section-copy">Results are sorted so the top cards make the matching engine and ranking outputs visible to the examiner.</p>
                 </div>
             </div>
 
@@ -103,6 +125,11 @@
                                 <strong>Matched skills:</strong> {{ job.matched_skills }}
                             </p>
                         {% endif %}
+
+                        <div class="workflow-meta">
+                            {{ ui_icon('rank', 'meta-inline-icon') }} ranked candidate ·
+                            {{ ui_icon('evidence', 'meta-inline-icon') }} explanation surface
+                        </div>
 
                         {% if job.description %}
                             <p class="job-card-desc">

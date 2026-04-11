@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% from "_ui_macros.html" import ui_icon %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -31,28 +32,28 @@
                     <span class="brand-mark">IA</span>
                     <span class="brand-copy">
                         <strong class="brand-title">Internship Analyzer</strong>
-                        <span>Scraped roles, salary signals, and search intelligence</span>
+                        <span>Scraping, search ranking, analytics, and salary intelligence for software hiring workflows</span>
                     </span>
                 </a>
 
                 <nav class="site-nav" aria-label="Primary navigation">
                     <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                        Dashboard
+                        <span class="nav-link-content">{{ ui_icon('dashboard', 'nav-icon') }}<span>Dashboard</span></span>
                     </a>
                     <a href="{{ url_for('scrape_page') }}" class="nav-link {% if request.endpoint == 'scrape_page' %}active{% endif %}">
-                        Scrape
+                        <span class="nav-link-content">{{ ui_icon('scrape', 'nav-icon') }}<span>Scrape</span></span>
                     </a>
                     <a href="{{ url_for('jobs') }}" class="nav-link {% if request.endpoint == 'jobs' %}active{% endif %}">
-                        Jobs
+                        <span class="nav-link-content">{{ ui_icon('jobs', 'nav-icon') }}<span>Jobs</span></span>
                     </a>
                     <a href="{{ url_for('search') }}" class="nav-link {% if request.endpoint == 'search' %}active{% endif %}">
-                        Skill Search
+                        <span class="nav-link-content">{{ ui_icon('search', 'nav-icon') }}<span>Skill Search</span></span>
                     </a>
                     <a href="{{ url_for('prediction') }}" class="nav-link {% if request.endpoint == 'prediction' %}active{% endif %}">
-                        Salary Predictor
+                        <span class="nav-link-content">{{ ui_icon('prediction', 'nav-icon') }}<span>Salary Predictor</span></span>
                     </a>
                     <a href="{{ url_for('about') }}" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">
-                        About
+                        <span class="nav-link-content">{{ ui_icon('about', 'nav-icon') }}<span>About</span></span>
                     </a>
                 </nav>
             </div>
@@ -80,7 +81,7 @@
             <div class="shell-inner footer-inner">
                 <div>
                     <strong>Internship Trend Analyzer</strong>
-                    <span>Flask interface for scraped software hiring intelligence.</span>
+                    <span>Multi-module Flask platform for scraping, storage, matching, and salary intelligence.</span>
                 </div>
                 <div class="footer-note">
                     &copy; {{ current_year }} · Built by {{ site_owner_name }}

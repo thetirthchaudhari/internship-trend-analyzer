@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
 {% block title %}Prediction · Internship Trend Analyzer{% endblock %}
 
 {% block content %}
@@ -6,15 +7,20 @@
     <section class="page-header split-header">
         <div>
             <div class="eyebrow">Retrieval-backed salary prediction</div>
-            <h1 class="page-title">Estimate internship pay with cleaner context and clearer evidence</h1>
+            <h1 class="page-title">Estimate compensation with retrieved evidence, not guesswork.</h1>
             <p class="page-lead">
                 Paste a role description and the app retrieves comparable salary rows plus scraped job descriptions before generating a monthly estimate.
             </p>
         </div>
 
         <div class="info-panel">
-            <div class="panel-kicker">Evidence sources</div>
+            <div class="panel-kicker">{{ ui_icon('evidence', 'panel-inline-icon') }} Evidence sources</div>
             <p>Kaggle salary records provide compensation anchors, while scraped LinkedIn and Naukri roles provide wording and market-shape context.</p>
+            <div class="token-row">
+                <span class="token positive">Salary anchors</span>
+                <span class="token accent">Scraped descriptions</span>
+                <span class="token soft">Context retrieval</span>
+            </div>
         </div>
     </section>
 
@@ -22,9 +28,26 @@
         <div class="alert alert-warning">{{ message }}</div>
     {% endif %}
 
+    <section class="section-block">
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('salary', 'insight-icon') }} Prediction stack</div>
+                <p>This module makes the project feel product-grade by showing an intelligence layer built on top of both external and scraped evidence.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('database', 'insight-icon') }} Dual corpus</div>
+                <p>Salary rows and stored job descriptions work together, demonstrating that the app reuses its data layer in multiple advanced ways.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('rank', 'insight-icon') }} Explainable output</div>
+                <p>Retrieved examples, corpus counts, and confidence cues help the final estimate read like a transparent product feature.</p>
+            </article>
+        </div>
+    </section>
+
     <section class="panel">
         <div class="panel-header">
-            <div class="panel-kicker">Prediction input</div>
+            <div class="panel-kicker">{{ ui_icon('prediction', 'panel-inline-icon') }} Prediction input</div>
             <h2 class="panel-title">Configure the salary read</h2>
             <p class="panel-copy">Tune the retrieval scope, then paste the role description you want analyzed.</p>
         </div>
@@ -190,7 +213,8 @@
             <div class="section-heading">
                 <div>
                     <div class="eyebrow">Retrieved salary evidence</div>
-                    <h2 class="section-title">Comparable salary examples</h2>
+                    <h2 class="section-title section-title-row">{{ ui_icon('salary', 'section-icon') }} Comparable salary examples</h2>
+                    <p class="section-copy">These examples make the final output look grounded in retrievable evidence rather than a black-box guess.</p>
                 </div>
             </div>
 
@@ -254,7 +278,8 @@
             <div class="section-heading">
                 <div>
                     <div class="eyebrow">Matched descriptions</div>
-                    <h2 class="section-title">Scraped roles used for wording context</h2>
+                    <h2 class="section-title section-title-row">{{ ui_icon('search', 'section-icon') }} Scraped roles used for wording context</h2>
+                    <p class="section-copy">This second evidence layer shows how the platform reuses its own scraped corpus to contextualize prediction output.</p>
                 </div>
             </div>
 

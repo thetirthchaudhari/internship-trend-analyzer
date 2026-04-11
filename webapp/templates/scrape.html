@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
 {% block title %}Scrape Studio · Internship Trend Analyzer{% endblock %}
 
 {% block content %}
@@ -6,21 +7,39 @@
     <section class="hero-panel">
         <div class="hero-copy">
             <div class="eyebrow">Scrape studio</div>
-            <h1 class="hero-title">Launch targeted LinkedIn and Naukri collection runs.</h1>
+            <h1 class="hero-title">Operate the collection engine behind the product.</h1>
             <p class="page-lead">
-                Use presets for software-role families, add your own custom queries, and decide which optional fields
-                should be saved alongside each job.
+                Launch targeted LinkedIn and Naukri collection runs, combine preset role families with custom queries,
+                and control which optional fields become part of the reusable analytics dataset.
             </p>
 
             <div class="hero-actions">
                 <a href="{{ url_for('dashboard') }}" class="button button-primary">Back to dashboard</a>
                 <a href="{{ url_for('jobs') }}" class="button button-secondary">Browse saved jobs</a>
             </div>
+
+            <div class="proof-grid">
+                <article class="proof-card">
+                    <div class="proof-label">{{ ui_icon('scrape', 'proof-icon') }} Query launch</div>
+                    <strong>Dual-source</strong>
+                    <span>run focused collection pipelines across LinkedIn and Naukri</span>
+                </article>
+                <article class="proof-card">
+                    <div class="proof-label">{{ ui_icon('filter', 'proof-icon') }} Field control</div>
+                    <strong>Selective</strong>
+                    <span>save only the optional metadata you want in storage</span>
+                </article>
+                <article class="proof-card">
+                    <div class="proof-label">{{ ui_icon('database', 'proof-icon') }} Dataset continuity</div>
+                    <strong>{{ stats.total_jobs }}</strong>
+                    <span>roles already available before the next collection run</span>
+                </article>
+            </div>
         </div>
 
         <div class="hero-signal">
             <div class="signal-panel">
-                <div class="panel-kicker">Dataset status</div>
+                <div class="panel-kicker">{{ ui_icon('database', 'panel-inline-icon') }} Dataset status</div>
                 <div class="signal-value">{{ stats.total_jobs }}</div>
                 <div class="signal-label">jobs currently stored before the next scraping run</div>
 
@@ -39,6 +58,14 @@
                         <span class="signal-meta-label">Sources tracked</span>
                         <strong>{{ stats.by_source|length }}</strong>
                     </div>
+                    <div>
+                        <span class="signal-meta-label">Role families</span>
+                        <strong>{{ stats.by_category|length }}</strong>
+                    </div>
+                    <div>
+                        <span class="signal-meta-label">Studio mode</span>
+                        <strong>Collection control</strong>
+                    </div>
                 </div>
             </div>
         </div>
@@ -47,10 +74,37 @@
     <section class="section-block">
         <div class="section-heading">
             <div>
-                <div class="eyebrow">Collection controls</div>
-                <h2 class="section-title">Choose where the next batch of roles comes from</h2>
+                <div class="eyebrow">Collection workflow</div>
+                <h2 class="section-title section-title-row">{{ ui_icon('workflow', 'section-icon') }} Move from role intent to stored evidence</h2>
                 <p class="section-copy">
-                    LinkedIn is useful for richer role descriptions, while Naukri is helpful for broader hiring-market coverage.
+                    The scrape studio is framed as an active control center: define the role family, choose a source, decide the metadata payload, and push new rows into the product database.
+                </p>
+            </div>
+        </div>
+
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('filter', 'insight-icon') }} Step 1</div>
+                <p>Select presets or enter custom queries so each run targets a clearly scoped software-role family.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('database', 'insight-icon') }} Step 2</div>
+                <p>Choose the optional fields worth storing so downstream search and prediction modules get cleaner evidence.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('dashboard', 'insight-icon') }} Step 3</div>
+                <p>Return to the dashboard and inventory views to inspect source balance, latest additions, and analysis readiness.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">Collection controls</div>
+                <h2 class="section-title section-title-row">{{ ui_icon('source', 'section-icon') }} Choose where the next batch of roles comes from</h2>
+                <p class="section-copy">
+                    LinkedIn is useful for richer role descriptions, while Naukri is helpful for broader hiring-market coverage and cross-checking role-market breadth.
                 </p>
             </div>
         </div>
@@ -58,7 +112,7 @@
         <div class="panel-grid two-up">
             <article class="panel">
                 <div class="panel-header">
-                    <div class="panel-kicker">LinkedIn</div>
+                    <div class="panel-kicker">{{ ui_icon('scrape', 'panel-inline-icon') }} LinkedIn</div>
                     <h3 class="panel-title">Focused role harvesting</h3>
                     <p class="panel-copy">
                         Good for richer descriptions and live role phrasing across internship and full-time software hiring.
@@ -143,7 +197,7 @@
 
             <article class="panel">
                 <div class="panel-header">
-                    <div class="panel-kicker">Naukri</div>
+                    <div class="panel-kicker">{{ ui_icon('source', 'panel-inline-icon') }} Naukri</div>
                     <h3 class="panel-title">Role-market capture</h3>
                     <p class="panel-copy">
                         Useful for a broader software pipeline, from internship discovery to full-time hiring signals.

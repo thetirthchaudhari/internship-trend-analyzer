@@ -1,28 +1,47 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
 {% block title %}Dashboard · Internship Trend Analyzer{% endblock %}
 
 {% block content %}
 <div class="page-stack">
     <section class="hero-panel">
         <div class="hero-copy">
-            <div class="eyebrow">Software hiring intelligence</div>
-            <h1 class="hero-title">Track the market, then decide what to scrape next.</h1>
+            <div class="eyebrow">Software hiring intelligence platform</div>
+            <h1 class="hero-title">Command the full internship hiring workflow from one operating surface.</h1>
             <p class="page-lead">
-                The dashboard keeps the current dataset, source mix, role categories, and latest additions in one place.
-                When you want to collect more roles, jump into the dedicated scrape studio.
+                This dashboard unifies scraping, storage, search, ranking, and salary intelligence into a single product view.
+                It helps you audit dataset health, monitor source coverage, and move directly into the next analysis step.
             </p>
 
             <div class="hero-actions">
                 <a href="{{ url_for('scrape_page') }}" class="button button-primary">Open scrape studio</a>
                 <a href="{{ url_for('jobs') }}" class="button button-secondary">Browse job inventory</a>
             </div>
+
+            <div class="proof-grid">
+                <article class="proof-card">
+                    <div class="proof-label">{{ ui_icon('source', 'proof-icon') }} Source coverage</div>
+                    <strong>{{ stats.by_source|length }}</strong>
+                    <span>active collection channels feeding the dataset</span>
+                </article>
+                <article class="proof-card">
+                    <div class="proof-label">{{ ui_icon('database', 'proof-icon') }} Stored scope</div>
+                    <strong>{{ stats.total_jobs }}</strong>
+                    <span>roles available for downstream browsing and analysis</span>
+                </article>
+                <article class="proof-card">
+                    <div class="proof-label">{{ ui_icon('workflow', 'proof-icon') }} Product modules</div>
+                    <strong>5+</strong>
+                    <span>workflow lanes covering collection, matching, and prediction</span>
+                </article>
+            </div>
         </div>
 
         <div class="hero-signal">
             <div class="signal-panel">
-                <div class="panel-kicker">System pulse</div>
+                <div class="panel-kicker">{{ ui_icon('signal', 'panel-inline-icon') }} System pulse</div>
                 <div class="signal-value">{{ stats.total_jobs }}</div>
-                <div class="signal-label">jobs currently available in the dataset</div>
+                <div class="signal-label">jobs currently indexed across the product dataset</div>
 
                 <div class="signal-meta">
                     <div>
@@ -39,6 +58,14 @@
                         <span class="signal-meta-label">Sources tracked</span>
                         <strong>{{ stats.by_source|length }}</strong>
                     </div>
+                    <div>
+                        <span class="signal-meta-label">Category families</span>
+                        <strong>{{ stats.by_category|length }}</strong>
+                    </div>
+                    <div>
+                        <span class="signal-meta-label">Analysis status</span>
+                        <strong>{% if stats.total_jobs %}Ready{% else %}Awaiting first scrape{% endif %}</strong>
+                    </div>
                 </div>
             </div>
         </div>
@@ -47,20 +74,23 @@
     <section class="section-block">
         <div class="section-heading">
             <div>
-                <div class="eyebrow">Quick snapshot</div>
-                <h2 class="section-title">See what the dataset looks like right now</h2>
+                <div class="eyebrow">System overview</div>
+                <h2 class="section-title section-title-row">{{ ui_icon('dashboard', 'section-icon') }} See what the dataset looks like right now</h2>
+                <p class="section-copy">
+                    Core inventory metrics, source balance, and category concentration are grouped here so the platform reads like a true monitoring dashboard.
+                </p>
             </div>
         </div>
 
         <div class="metric-grid">
-            <article class="metric-card">
-                <div class="metric-label">Total jobs in DB</div>
+            <article class="metric-card metric-card-featured">
+                <div class="metric-label">{{ ui_icon('database', 'metric-icon') }} Total jobs in DB</div>
                 <div class="metric-value">{{ stats.total_jobs }}</div>
-                <div class="metric-note">Live count from the current storage layer.</div>
+                <div class="metric-note">Live inventory count from the current storage and ingestion layer.</div>
             </article>
 
             <article class="metric-card">
-                <div class="metric-label">By source</div>
+                <div class="metric-label">{{ ui_icon('source', 'metric-icon') }} By source</div>
                 {% if stats.by_source %}
                     <div class="token-row">
                         {% for src, cnt in stats.by_source.items() %}
@@ -77,7 +107,7 @@
             </article>
 
             <article class="metric-card">
-                <div class="metric-label">Top categories</div>
+                <div class="metric-label">{{ ui_icon('rank', 'metric-icon') }} Top categories</div>
                 {% if top_categories %}
                     <div class="token-row">
                         {% for cat, cnt in top_categories %}
@@ -93,13 +123,28 @@
             </article>
 
             <article class="metric-card">
-                <div class="metric-label">Next action</div>
+                <div class="metric-label">{{ ui_icon('workflow', 'metric-icon') }} Next action</div>
                 <div class="metric-note">
-                    Use the scrape page to refresh inventory, then return here to review what changed.
+                    Use the scrape studio to refresh source coverage, then return here to review how the dataset changed.
                 </div>
                 <div class="mini-action-row">
                     <a href="{{ url_for('scrape_page') }}" class="button button-ghost">Scrape roles</a>
                 </div>
+            </article>
+        </div>
+
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('source', 'insight-icon') }} Source mix</div>
+                <p>Collection spans LinkedIn and Naukri so the product can balance richer role descriptions with broader hiring-market coverage.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('rank', 'insight-icon') }} Category signals</div>
+                <p>Role families surface immediately after scraping, which makes the dashboard useful as an analytics checkpoint, not just a landing page.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('prediction', 'insight-icon') }} Downstream intelligence</div>
+                <p>The same stored inventory powers skill matching, evidence retrieval, and salary prediction, showing the system’s end-to-end scope.</p>
             </article>
         </div>
     </section>
@@ -108,47 +153,60 @@
         <div class="section-heading">
             <div>
                 <div class="eyebrow">Workflow lanes</div>
-                <h2 class="section-title">Move from collection to analysis</h2>
+                <h2 class="section-title section-title-row">{{ ui_icon('workflow', 'section-icon') }} Move from collection to analysis</h2>
                 <p class="section-copy">
-                    Each workflow now has its own page, so scraping and analysis stay easier to navigate.
+                    Each module now behaves like one station in a larger product workflow, making the project read as a real system with collection, browsing, matching, and prediction layers.
                 </p>
             </div>
         </div>
 
-        <div class="panel-grid two-up">
-            <article class="info-panel">
-                <div class="panel-kicker">Collect</div>
+        <div class="workflow-grid">
+            <article class="info-panel workflow-card">
+                <div class="panel-kicker">{{ ui_icon('scrape', 'panel-inline-icon') }} Collect</div>
                 <h3 class="panel-title">Scrape studio</h3>
-                <p>Launch LinkedIn and Naukri runs with preset software-role families and custom queries.</p>
+                <p>Launch LinkedIn and Naukri runs with preset software-role families, custom queries, and field-level capture control.</p>
+                <div class="workflow-meta">Source control · Query presets · Field selection</div>
                 <div class="mini-action-row">
                     <a href="{{ url_for('scrape_page') }}" class="button button-secondary">Go to scrape</a>
                 </div>
             </article>
 
-            <article class="info-panel">
-                <div class="panel-kicker">Browse</div>
+            <article class="info-panel workflow-card">
+                <div class="panel-kicker">{{ ui_icon('jobs', 'panel-inline-icon') }} Browse</div>
                 <h3 class="panel-title">Job inventory</h3>
-                <p>Filter the stored dataset by source, role category, and text search to inspect the latest roles.</p>
+                <p>Filter the stored dataset by source, role category, and text search to inspect the latest roles as a structured inventory.</p>
+                <div class="workflow-meta">Storage layer · Search filters · Metadata browsing</div>
                 <div class="mini-action-row">
                     <a href="{{ url_for('jobs') }}" class="button button-secondary">Open jobs</a>
                 </div>
             </article>
 
-            <article class="info-panel">
-                <div class="panel-kicker">Match</div>
+            <article class="info-panel workflow-card">
+                <div class="panel-kicker">{{ ui_icon('search', 'panel-inline-icon') }} Match</div>
                 <h3 class="panel-title">Skill search</h3>
-                <p>Search the job pool by your stack and quickly surface roles with stronger skill overlap.</p>
+                <p>Search the job pool by your stack and surface roles using explicit overlap plus ranking-aware text context.</p>
+                <div class="workflow-meta">Matching logic · Ranked results · Skill overlap evidence</div>
                 <div class="mini-action-row">
                     <a href="{{ url_for('search') }}" class="button button-secondary">Search by skills</a>
                 </div>
             </article>
 
-            <article class="info-panel">
-                <div class="panel-kicker">Estimate</div>
+            <article class="info-panel workflow-card">
+                <div class="panel-kicker">{{ ui_icon('prediction', 'panel-inline-icon') }} Estimate</div>
                 <h3 class="panel-title">Salary predictor</h3>
-                <p>Use retrieved salary evidence and scraped role context to estimate compensation ranges.</p>
+                <p>Use retrieved salary evidence and scraped role context to estimate compensation ranges with evidence-backed output.</p>
+                <div class="workflow-meta">Retrieval pipeline · Evidence cards · Final salary read</div>
                 <div class="mini-action-row">
                     <a href="{{ url_for('prediction') }}" class="button button-secondary">Predict salary</a>
+                </div>
+            </article>
+
+            <article class="info-panel workflow-card workflow-card-wide">
+                <div class="panel-kicker">{{ ui_icon('about', 'panel-inline-icon') }} Context</div>
+                <h3 class="panel-title">Project story and contact</h3>
+                <p>See how the full system is structured, what scope it covers, and how messages are captured into a separate contact workflow.</p>
+                <div class="workflow-meta">Owner context · Product framing · Contact database</div>
+                <div class="mini-action-row">
                     <a href="{{ url_for('about') }}" class="button button-ghost">About the project</a>
                 </div>
             </article>
@@ -159,7 +217,10 @@
         <div class="section-heading">
             <div>
                 <div class="eyebrow">Recent additions</div>
-                <h2 class="section-title">Latest jobs in the dataset</h2>
+                <h2 class="section-title section-title-row">{{ ui_icon('jobs', 'section-icon') }} Latest jobs in the dataset</h2>
+                <p class="section-copy">
+                    Fresh rows provide visible proof that the collection pipeline is active and that the downstream modules are backed by real stored data.
+                </p>
             </div>
             <a href="{{ url_for('jobs') }}" class="button button-ghost">Open full job library</a>
         </div>

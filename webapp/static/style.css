@@ -245,6 +245,28 @@ textarea {
   transition: background 0.18s ease, color 0.18s ease, transform 0.22s ease, box-shadow 0.22s ease;
 }
 
+.nav-link-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-icon,
+.section-icon,
+.panel-inline-icon,
+.metric-icon,
+.proof-icon,
+.insight-icon,
+.meta-inline-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.nav-icon {
+  opacity: 0.82;
+}
+
 .nav-link::after {
   content: "";
   position: absolute;
@@ -578,6 +600,26 @@ textarea {
   line-height: 1.05;
 }
 
+.section-title-row,
+.proof-label,
+.insight-label,
+.workflow-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.section-title-row {
+  flex-wrap: wrap;
+}
+
+.section-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--accent-strong);
+}
+
 .metric-grid,
 .panel-grid,
 .latest-grid,
@@ -612,6 +654,90 @@ textarea {
   box-shadow: var(--shadow-soft);
 }
 
+.metric-card-featured {
+  background: linear-gradient(180deg, rgba(230, 243, 240, 0.88), rgba(255, 255, 255, 0.84));
+}
+
+.proof-grid,
+.insight-strip,
+.workflow-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.proof-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.proof-card,
+.insight-card {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-soft);
+}
+
+.proof-card {
+  display: grid;
+  gap: 8px;
+}
+
+.proof-label,
+.insight-label {
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.proof-card strong {
+  color: var(--ink-strong);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.proof-card span,
+.insight-card p,
+.workflow-meta {
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.insight-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.insight-card {
+  display: grid;
+  gap: 10px;
+}
+
+.insight-card p {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.workflow-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workflow-card {
+  min-height: 100%;
+}
+
+.workflow-card-wide {
+  grid-column: 1 / -1;
+}
+
+.workflow-meta {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 0.92rem;
+}
+
 .metric-value {
   margin-top: 10px;
   font-size: 2.3rem;
@@ -627,6 +753,14 @@ textarea {
 .footer-note {
   color: var(--ink-soft);
   line-height: 1.55;
+}
+
+.panel-inline-icon,
+.metric-icon,
+.proof-icon,
+.insight-icon,
+.meta-inline-icon {
+  color: var(--accent-strong);
 }
 
 .mini-action-row {
@@ -1373,6 +1507,7 @@ input[type="range"]:focus {
 .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .page-lead,
 .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .hero-actions,
 .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .hero-signal,
+.js-motion.page-intro-ready .page-stack > .hero-panel:first-child .proof-grid,
 .js-motion.page-intro-ready .page-stack > .page-header:first-child .eyebrow,
 .js-motion.page-intro-ready .page-stack > .page-header:first-child .page-title,
 .js-motion.page-intro-ready .page-stack > .page-header:first-child .page-lead,
@@ -1384,6 +1519,7 @@ input[type="range"]:focus {
 .js-motion.page-intro-active .page-stack > .hero-panel:first-child .page-lead,
 .js-motion.page-intro-active .page-stack > .hero-panel:first-child .hero-actions,
 .js-motion.page-intro-active .page-stack > .hero-panel:first-child .hero-signal,
+.js-motion.page-intro-active .page-stack > .hero-panel:first-child .proof-grid,
 .js-motion.page-intro-active .page-stack > .page-header:first-child .eyebrow,
 .js-motion.page-intro-active .page-stack > .page-header:first-child .page-title,
 .js-motion.page-intro-active .page-stack > .page-header:first-child .page-lead,
@@ -1414,6 +1550,7 @@ input[type="range"]:focus {
 
 .js-motion.page-intro-active .page-stack > .hero-panel:first-child .hero-actions,
 .js-motion.page-intro-active .page-stack > .hero-panel:first-child .hero-signal,
+.js-motion.page-intro-active .page-stack > .hero-panel:first-child .proof-grid,
 .js-motion.page-intro-active .page-stack > .page-header:first-child .mini-action-row,
 .js-motion.page-intro-active .page-stack > .page-header:first-child .info-panel {
   animation: intro-content-enter 860ms var(--ease-cinematic) 540ms both;
@@ -1531,6 +1668,9 @@ input[type="range"]:focus {
   .panel-grid.two-up,
   .latest-grid,
   .example-grid,
+  .proof-grid,
+  .insight-strip,
+  .workflow-grid,
   .split-header,
   .hero-panel {
     grid-template-columns: 1fr;
@@ -1700,6 +1840,7 @@ input[type="range"]:focus {
   .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .page-lead,
   .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .hero-actions,
   .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .hero-signal,
+  .js-motion.page-intro-ready .page-stack > .hero-panel:first-child .proof-grid,
   .js-motion.page-intro-ready .page-stack > .page-header:first-child .eyebrow,
   .js-motion.page-intro-ready .page-stack > .page-header:first-child .page-title,
   .js-motion.page-intro-ready .page-stack > .page-header:first-child .page-lead,
@@ -1711,6 +1852,7 @@ input[type="range"]:focus {
   .js-motion.page-intro-active .page-stack > .hero-panel:first-child .page-lead,
   .js-motion.page-intro-active .page-stack > .hero-panel:first-child .hero-actions,
   .js-motion.page-intro-active .page-stack > .hero-panel:first-child .hero-signal,
+  .js-motion.page-intro-active .page-stack > .hero-panel:first-child .proof-grid,
   .js-motion.page-intro-active .page-stack > .page-header:first-child .eyebrow,
   .js-motion.page-intro-active .page-stack > .page-header:first-child .page-title,
   .js-motion.page-intro-active .page-stack > .page-header:first-child .page-lead,

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
 {% block title %}About Us · Internship Trend Analyzer{% endblock %}
 
 {% block content %}
@@ -6,15 +7,15 @@
     <section class="page-header split-header">
         <div>
             <div class="eyebrow">About us</div>
-            <h1 class="page-title">Built to make software hiring data easier to collect and explore.</h1>
+            <h1 class="page-title">A multi-module software hiring intelligence product built for real workflow depth.</h1>
             <p class="page-lead">
-                This platform combines scraping, job search, and salary estimation in one workflow so software developers
-                can inspect the market with less manual effort.
+                This platform combines scraping, job search, skill matching, and salary estimation in one workflow so software developers
+                can inspect the market with less manual effort and more reusable data.
             </p>
         </div>
 
         <div class="info-panel">
-            <div class="panel-kicker">Project owner</div>
+            <div class="panel-kicker">{{ ui_icon('about', 'panel-inline-icon') }} Project owner</div>
             <p>
                 Managed by {{ site_owner_name }} from {{ site_owner_location }}, with a dedicated contact form that saves
                 inbound messages into a separate Mongo database.
@@ -22,10 +23,27 @@
         </div>
     </section>
 
+    <section class="section-block">
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('scrape', 'insight-icon') }} Collection</div>
+                <p>LinkedIn and Naukri scraping provide the live market feed that powers every downstream page of the product.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('database', 'insight-icon') }} Storage</div>
+                <p>MongoDB acts as the reusable data layer, making this project more than a single-use scraper or static dashboard.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('prediction', 'insight-icon') }} Intelligence</div>
+                <p>Matching and salary estimation modules turn collected roles into a visible analytics product with layered value.</p>
+            </article>
+        </div>
+    </section>
+
     <section class="panel-grid two-up">
         <article class="panel">
             <div class="panel-header">
-                <div class="panel-kicker">Who built this</div>
+                <div class="panel-kicker">{{ ui_icon('about', 'panel-inline-icon') }} Who built this</div>
                 <h2 class="panel-title">{{ site_owner_name }}</h2>
                 <p class="panel-copy">
                     Building a practical software hiring platform that brings together scraping, search, and salary intelligence.
@@ -45,10 +63,10 @@
 
         <article class="panel">
             <div class="panel-header">
-                <div class="panel-kicker">What the platform does</div>
+                <div class="panel-kicker">{{ ui_icon('workflow', 'panel-inline-icon') }} What the platform does</div>
                 <h2 class="panel-title">Current workflow</h2>
                 <p class="panel-copy">
-                    The app is structured so collection and analysis are now separated into dedicated pages.
+                    The app is structured so collection, storage, browsing, matching, and prediction now live in dedicated product modules.
                 </p>
             </div>
 
@@ -70,7 +88,7 @@
     <section class="panel-grid two-up">
         <article class="panel">
             <div class="panel-header">
-                <div class="panel-kicker">Direct contact</div>
+                <div class="panel-kicker">{{ ui_icon('contact', 'panel-inline-icon') }} Direct contact</div>
                 <h2 class="panel-title">Reach out directly</h2>
                 <p class="panel-copy">
                     If you want to discuss the platform, collaboration, or hiring-data workflows, you can use the details below.
@@ -97,7 +115,7 @@
 
         <article class="panel">
             <div class="panel-header">
-                <div class="panel-kicker">Contact us</div>
+                <div class="panel-kicker">{{ ui_icon('contact', 'panel-inline-icon') }} Contact us</div>
                 <h2 class="panel-title">Send a message</h2>
                 <p class="panel-copy">
                     Messages from this form are saved to the separate `contact_requests` Mongo database.

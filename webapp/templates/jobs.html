@@ -1,21 +1,36 @@
 {% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
 {% block title %}Jobs · Internship Trend Analyzer{% endblock %}
 
 {% block content %}
 <div class="page-stack">
     <section class="page-header">
-        <div class="eyebrow">Job inventory</div>
-        <h1 class="page-title">Browse the scraped role library</h1>
-        <p class="page-lead">
-            Filter by source, role category, or free-text search to explore the software roles currently in the dataset.
-        </p>
+        <div class="split-header">
+            <div>
+                <div class="eyebrow">Job inventory</div>
+                <h1 class="page-title">Browse the product’s live role inventory like a searchable dataset.</h1>
+                <p class="page-lead">
+                    Filter by source, role category, or free-text search to inspect the software roles already captured by the scraping pipeline.
+                </p>
+            </div>
+
+            <div class="info-panel">
+                <div class="panel-kicker">{{ ui_icon('database', 'panel-inline-icon') }} Inventory status</div>
+                <p>This module exposes the stored role library as a browsable data product so source coverage, role families, and raw description evidence stay easy to inspect.</p>
+                <div class="token-row">
+                    <span class="token accent">Roles {{ total }}</span>
+                    <span class="token soft">Sources {{ sources|length }}</span>
+                    <span class="token warm">Categories {{ categories|length }}</span>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section class="panel filter-panel">
         <div class="panel-header">
-            <div class="panel-kicker">Filters</div>
+            <div class="panel-kicker">{{ ui_icon('filter', 'panel-inline-icon') }} Filters</div>
             <h2 class="panel-title">Refine the view</h2>
-            <p class="panel-copy">These filters work across the already scraped dataset and update the job list below.</p>
+            <p class="panel-copy">These filters operate on the stored dataset only, so this page reads like a real inventory browser rather than a direct scrape form.</p>
         </div>
 
         <form method="get" class="form-grid four-col">
@@ -55,14 +70,29 @@
                 <button type="submit" class="button button-primary full-width">Apply filters</button>
             </div>
         </form>
+
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('source', 'insight-icon') }} Source-aware browsing</div>
+                <p>Compare how roles differ across LinkedIn and Naukri without leaving the inventory module.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('rank', 'insight-icon') }} Category inspection</div>
+                <p>Use role-category filters to quickly validate whether the dataset is balanced across software domains.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('search', 'insight-icon') }} Raw text retrieval</div>
+                <p>Free-text search makes stored descriptions and titles reusable as evidence for later search and prediction flows.</p>
+            </article>
+        </div>
     </section>
 
     <section class="section-block">
         <div class="section-heading">
             <div>
                 <div class="eyebrow">Results</div>
-                <h2 class="section-title">{{ total }} role{{ '' if total == 1 else 's' }} found</h2>
-                <p class="section-copy">Showing {{ jobs|length }} result{{ '' if jobs|length == 1 else 's' }} on this page.</p>
+                <h2 class="section-title section-title-row">{{ ui_icon('jobs', 'section-icon') }} {{ total }} role{{ '' if total == 1 else 's' }} found</h2>
+                <p class="section-copy">Showing {{ jobs|length }} result{{ '' if jobs|length == 1 else 's' }} on this page, with full metadata preserved for inspection.</p>
             </div>
         </div>
 
@@ -91,6 +121,11 @@
                                 <span class="token accent">{{ job.employment_status }}</span>
                             {% endif %}
                             <span class="token soft">{{ job.scraped_at or "Timestamp unavailable" }}</span>
+                        </div>
+
+                        <div class="workflow-meta">
+                            {{ ui_icon('database', 'meta-inline-icon') }} Stored row ·
+                            {{ ui_icon('evidence', 'meta-inline-icon') }} Description evidence {% if job.description %}available{% else %}missing{% endif %}
                         </div>
 
                         <p class="job-card-desc">
