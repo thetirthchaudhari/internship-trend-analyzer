@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block title %}Prediction · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="page-header split-header">
+        <div>
+            <div class="eyebrow">Retrieval-backed salary prediction</div>
+            <h1 class="page-title">Estimate internship pay with cleaner context and clearer evidence</h1>
+            <p class="page-lead">
+                Paste a role description and the app retrieves comparable salary rows plus scraped job descriptions before generating a monthly estimate.
+            </p>
+        </div>
+
+        <div class="info-panel">
+            <div class="panel-kicker">Evidence sources</div>
+            <p>Kaggle salary records provide compensation anchors, while scraped LinkedIn and Naukri roles provide wording and market-shape context.</p>
+        </div>
+    </section>
+
+    {% if message %}
+        <div class="alert alert-warning">{{ message }}</div>
+    {% endif %}
+
+    <section class="panel">
+        <div class="panel-header">
+            <div class="panel-kicker">Prediction input</div>
+            <h2 class="panel-title">Configure the salary read</h2>
+            <p class="panel-copy">Tune the retrieval scope, then paste the role description you want analyzed.</p>
+        </div>
+
+        <form method="post" class="stack-form">
+            <div class="form-grid two-col">
+                <div class="field-stack">
+                    <label for="job_title">Job title</label>
+                    <input
+                        id="job_title"
+                        type="text"
+                        name="job_title"
+                        placeholder="Machine Learning Intern"
+                        value="{{ title_input }}"
+                    >
+                </div>
+
+                <div class="field-stack">
+                    <label for="job_location">Location</label>
+                    <input
+                        id="job_location"
+                        type="text"
+                        name="job_location"
+                        placeholder="Bengaluru / Remote"
+                        value="{{ location_input }}"
+                    >
+                </div>
+            </div>
+
+            <div class="field-stack">
+                <label for="job_description">Job description</label>
+                <textarea
+                    id="job_description"
+                    name="job_description"
+                    class="prediction-textarea"
+                    placeholder="Paste the full role description here"
+                >{{ description_input }}</textarea>
+            </div>
+
+            <div class="form-grid two-col">
+                <div class="field-stack">
+                    <label>Prediction mode</label>
+                    <div class="mode-switch-card">
+                        <span class="mode-label {% if employment_mode == 'intern' %}active{% endif %}" data-mode-label="intern">Intern</span>
+
+                        <label class="mode-switch" for="full_time_mode" aria-label="Switch between intern and full-time prediction">
+                            <input
+                                id="full_time_mode"
+                                type="checkbox"
+                                name="full_time_mode"
+                                {% if employment_mode == 'full_time' %}checked{% endif %}
+                            >
+                            <span class="mode-track"></span>
+                            <span class="mode-thumb"></span>
+                        </label>
+
+                        <span class="mode-label {% if employment_mode == 'full_time' %}active{% endif %}" data-mode-label="full_time">Full-time</span>
+                    </div>
+                    <div class="hint">Switch the retrieval target between internship stipends and full-time monthly salary estimates.</div>
+                </div>
+
+                <div class="field-stack">
+                    <label for="salary_examples_count">
+                        Salary evidence depth
+                        <span class="range-badge" id="salaryExamplesValue">{{ salary_examples_count }}</span>
+                    </label>
+                    <input
+                        id="salary_examples_count"
+                        type="range"
+                        name="salary_examples_count"
+                        min="3"
+                        max="10"
+                        step="1"
+                        value="{{ salary_examples_count }}"
+                        class="prediction-range"
+                    >
+                    <div class="hint">Higher values let the retriever consider more salary examples before it builds the final range.</div>
+                </div>
+            </div>
+
+            <div class="field-stack">
+                <label>Employment evidence filters</label>
+                <div class="filter-chip-grid" id="predictionStatusGrid">
+                    {% for status_value, status_label in prediction_status_options %}
+                        <label class="filter-chip">
+                            <input
+                                type="checkbox"
+                                name="salary_statuses"
+                                value="{{ status_value }}"
+                                {% if status_value in selected_status_filters %}checked{% endif %}
+                            >
+                            <span>{{ status_label }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                <div class="hint">These checkboxes limit which salary records the retrieval step is allowed to use.</div>
+            </div>
+
+            <div class="field-stack">
+                <label>Scraped industry panel</label>
+                <div class="advanced-panel">
+                    <details open>
+                        <summary>Choose which scraped categories can influence description retrieval</summary>
+                        <div class="panel-option-grid">
+                            {% for category_key, category_label in prediction_industry_options %}
+                                <label class="panel-option">
+                                    <input
+                                        type="checkbox"
+                                        name="scraped_categories"
+                                        value="{{ category_key }}"
+                                        {% if category_key in selected_scraped_categories %}checked{% endif %}
+                                    >
+                                    <span>{{ category_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="button button-primary">Predict salary</button>
+            </div>
+        </form>
+    </section>
+
+    {% if result %}
+        <section class="result-hero">
+            <div class="result-hero-main">
+                <div class="eyebrow">Prediction result</div>
+                <h2 class="result-value">{{ result.prediction }}</h2>
+                <p class="result-summary">{{ result.summary }}</p>
+            </div>
+
+            <div class="result-badges">
+                <span class="token accent">Mode {{ 'Full-Time' if result.employment_mode == 'full_time' else 'Intern' }}</span>
+                <span class="token soft">Confidence {{ result.confidence|capitalize }}</span>
+                <span class="token warm">Method {{ result.method.replace('_', ' ')|title }}</span>
+                <span class="token soft">Examples {{ result.salary_examples_used }}</span>
+                <span class="token soft">Corpus {{ result.salary_corpus_size }}</span>
+                {% for status in result.selected_employment_statuses %}
+                    <span class="token soft">{{ status }}</span>
+                {% endfor %}
+                {% for category in result.selected_scraped_categories %}
+                    <span class="token warm">{{ CATEGORY_LABELS.get(category, category) }}</span>
+                {% endfor %}
+            </div>
+
+            {% if result.warning %}
+                <div class="alert alert-warning">{{ result.warning }}</div>
+            {% endif %}
+
+            <div class="hint">
+                {% if result.used_cerebras %}
+                    Cerebras refined the final answer after retrieval.
+                {% else %}
+                    This response used local retrieval and heuristics only because Cerebras refinement was unavailable for this run.
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="section-block">
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">Retrieved salary evidence</div>
+                    <h2 class="section-title">Comparable salary examples</h2>
+                </div>
+            </div>
+
+            {% if result.retrieved_examples %}
+                <div class="example-grid">
+                    {% for example in result.retrieved_examples %}
+                        <article class="example-card">
+                            <div class="example-card-top">
+                                <div>
+                                    <h3>{{ example.title or "Untitled role" }}</h3>
+                                    <div class="job-meta-line">
+                                        <strong>{{ example.company or "Unknown company" }}</strong>
+                                        {% if example.location %}<span>{{ example.location }}</span>{% endif %}
+                                        {% if example.source %}<span>{{ example.source|capitalize }}</span>{% endif %}
+                                    </div>
+                                </div>
+                                <div class="score-panel compact">
+                                    <div class="score-label">Similarity</div>
+                                    <div class="score-value">{{ "%.3f"|format(example.similarity) }}</div>
+                                </div>
+                            </div>
+
+                            <div class="token-row">
+                                <span class="token positive">{{ example.salary }}</span>
+                                {% if example.duration %}
+                                    <span class="token soft">{{ example.duration }}</span>
+                                {% endif %}
+                                {% if example.role_category %}
+                                    <span class="token warm">{{ example.role_category }}</span>
+                                {% endif %}
+                                {% if example.employment_status %}
+                                    <span class="token soft">{{ example.employment_status }}</span>
+                                {% endif %}
+                            </div>
+
+                            {% if example.search_query %}
+                                <p class="callout-line"><strong>Matched via query:</strong> {{ example.search_query }}</p>
+                            {% endif %}
+
+                            {% if example.description_excerpt %}
+                                <p class="job-card-desc">
+                                    {{ example.description_excerpt }}{% if example.description_excerpt|length >= 220 %}...{% endif %}
+                                </p>
+                            {% endif %}
+
+                            {% if example.job_url %}
+                                <a href="{{ example.job_url }}" class="button button-secondary" target="_blank" rel="noopener">View source job</a>
+                            {% endif %}
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-panel">
+                    <h3>No salary examples were retrieved</h3>
+                    <p>Try broader text or adjust the filters so the retriever has more records to compare against.</p>
+                </div>
+            {% endif %}
+        </section>
+
+        <section class="section-block">
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">Matched descriptions</div>
+                    <h2 class="section-title">Scraped roles used for wording context</h2>
+                </div>
+            </div>
+
+            {% if result.description_examples %}
+                <div class="example-grid">
+                    {% for example in result.description_examples %}
+                        <article class="example-card">
+                            <div class="example-card-top">
+                                <div>
+                                    <h3>{{ example.title or "Untitled role" }}</h3>
+                                    <div class="job-meta-line">
+                                        <strong>{{ example.company or "Unknown company" }}</strong>
+                                        {% if example.location %}<span>{{ example.location }}</span>{% endif %}
+                                        {% if example.source %}<span>{{ example.source|capitalize }}</span>{% endif %}
+                                    </div>
+                                </div>
+                                <div class="score-panel compact">
+                                    <div class="score-label">Similarity</div>
+                                    <div class="score-value">{{ "%.3f"|format(example.similarity) }}</div>
+                                </div>
+                            </div>
+
+                            <div class="token-row">
+                                {% if example.role_category %}
+                                    <span class="token warm">{{ example.role_category }}</span>
+                                {% endif %}
+                                {% if example.search_query %}
+                                    <span class="token soft">{{ example.search_query }}</span>
+                                {% endif %}
+                            </div>
+
+                            {% if example.description_excerpt %}
+                                <p class="job-card-desc">
+                                    {{ example.description_excerpt }}{% if example.description_excerpt|length >= 240 %}...{% endif %}
+                                </p>
+                            {% endif %}
+
+                            {% if example.job_url %}
+                                <a href="{{ example.job_url }}" class="button button-secondary" target="_blank" rel="noopener">View scraped job</a>
+                            {% endif %}
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-panel">
+                    <h3>No close scraped descriptions were matched</h3>
+                    <p>That usually means the scraped dataset is still thin for this role shape or the filters were very narrow.</p>
+                </div>
+            {% endif %}
+        </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const slider = document.getElementById("salary_examples_count");
+  const sliderValue = document.getElementById("salaryExamplesValue");
+  const modeToggle = document.getElementById("full_time_mode");
+  const statusCheckboxes = document.querySelectorAll('input[name="salary_statuses"]');
+  const internLabel = document.querySelector('[data-mode-label="intern"]');
+  const fullTimeLabel = document.querySelector('[data-mode-label="full_time"]');
+
+  if (slider && sliderValue) {
+    const syncValue = () => {
+      sliderValue.textContent = slider.value;
+    };
+
+    slider.addEventListener("input", syncValue);
+    syncValue();
+  }
+
+  if (modeToggle && statusCheckboxes.length) {
+    const modeDefaults = {
+      intern: ["Intern", "Trainee"],
+      full_time: ["Full Time"],
+    };
+
+    const syncModeLabels = () => {
+      const isFullTime = modeToggle.checked;
+
+      if (internLabel) {
+        internLabel.classList.toggle("active", !isFullTime);
+      }
+      if (fullTimeLabel) {
+        fullTimeLabel.classList.toggle("active", isFullTime);
+      }
+    };
+
+    const applyDefaults = () => {
+      const mode = modeToggle.checked ? "full_time" : "intern";
+      const allowed = new Set(modeDefaults[mode]);
+
+      statusCheckboxes.forEach((checkbox) => {
+        checkbox.checked = allowed.has(checkbox.value);
+      });
+
+      syncModeLabels();
+    };
+
+    modeToggle.addEventListener("change", applyDefaults);
+    syncModeLabels();
+  }
+});
+</script>
+{% endblock %}

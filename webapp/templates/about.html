@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}About Us · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="page-header split-header">
+        <div>
+            <div class="eyebrow">About us</div>
+            <h1 class="page-title">Built to make software hiring data easier to collect and explore.</h1>
+            <p class="page-lead">
+                This platform combines scraping, job search, and salary estimation in one workflow so software developers
+                can inspect the market with less manual effort.
+            </p>
+        </div>
+
+        <div class="info-panel">
+            <div class="panel-kicker">Project owner</div>
+            <p>
+                Managed by {{ site_owner_name }} from {{ site_owner_location }}, with a dedicated contact form that saves
+                inbound messages into a separate Mongo database.
+            </p>
+        </div>
+    </section>
+
+    <section class="panel-grid two-up">
+        <article class="panel">
+            <div class="panel-header">
+                <div class="panel-kicker">Who built this</div>
+                <h2 class="panel-title">{{ site_owner_name }}</h2>
+                <p class="panel-copy">
+                    Building a practical software hiring platform that brings together scraping, search, and salary intelligence.
+                </p>
+            </div>
+
+            <div class="token-row">
+                <span class="token warm">{{ site_owner_location }}</span>
+                <a href="tel:{{ site_owner_phone_href }}" class="token accent">{{ site_owner_phone }}</a>
+                <a href="mailto:{{ site_owner_email }}" class="token positive">{{ site_owner_email }}</a>
+            </div>
+
+            <p class="callout-line">
+                <strong>Focus:</strong> a broader platform for software developers, not just AI and machine learning roles.
+            </p>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header">
+                <div class="panel-kicker">What the platform does</div>
+                <h2 class="panel-title">Current workflow</h2>
+                <p class="panel-copy">
+                    The app is structured so collection and analysis are now separated into dedicated pages.
+                </p>
+            </div>
+
+            <div class="token-row">
+                <span class="token soft">Dashboard</span>
+                <span class="token soft">Scrape Studio</span>
+                <span class="token soft">Jobs</span>
+                <span class="token soft">Skill Search</span>
+                <span class="token soft">Salary Predictor</span>
+            </div>
+
+            <p class="job-card-desc">
+                LinkedIn and Naukri scraping feed MongoDB, while search and salary prediction reuse the stored dataset
+                for downstream analysis.
+            </p>
+        </article>
+    </section>
+
+    <section class="panel-grid two-up">
+        <article class="panel">
+            <div class="panel-header">
+                <div class="panel-kicker">Direct contact</div>
+                <h2 class="panel-title">Reach out directly</h2>
+                <p class="panel-copy">
+                    If you want to discuss the platform, collaboration, or hiring-data workflows, you can use the details below.
+                </p>
+            </div>
+
+            <div class="stack-form">
+                <div class="callout-line">
+                    <strong>Name:</strong> {{ site_owner_name }}
+                </div>
+                <div class="callout-line">
+                    <strong>Mobile:</strong>
+                    <a href="tel:{{ site_owner_phone_href }}">{{ site_owner_phone }}</a>
+                </div>
+                <div class="callout-line">
+                    <strong>Email:</strong>
+                    <a href="mailto:{{ site_owner_email }}">{{ site_owner_email }}</a>
+                </div>
+                <div class="callout-line">
+                    <strong>Location:</strong> {{ site_owner_location }}
+                </div>
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header">
+                <div class="panel-kicker">Contact us</div>
+                <h2 class="panel-title">Send a message</h2>
+                <p class="panel-copy">
+                    Messages from this form are saved to the separate `contact_requests` Mongo database.
+                </p>
+            </div>
+
+            <form method="post" class="stack-form">
+                <div class="form-grid two-col">
+                    <div class="field-stack">
+                        <label for="contact_name">Name</label>
+                        <input
+                            id="contact_name"
+                            type="text"
+                            name="name"
+                            value="{{ contact_form.name }}"
+                            placeholder="Your name"
+                        >
+                    </div>
+
+                    <div class="field-stack">
+                        <label for="contact_email">Email</label>
+                        <input
+                            id="contact_email"
+                            type="text"
+                            name="email"
+                            value="{{ contact_form.email }}"
+                            placeholder="you@example.com"
+                        >
+                    </div>
+                </div>
+
+                <div class="form-grid two-col">
+                    <div class="field-stack">
+                        <label for="contact_phone">Phone</label>
+                        <input
+                            id="contact_phone"
+                            type="text"
+                            name="phone"
+                            value="{{ contact_form.phone }}"
+                            placeholder="+91 98765 43210"
+                        >
+                    </div>
+
+                    <div class="field-stack">
+                        <label for="contact_company">Company</label>
+                        <input
+                            id="contact_company"
+                            type="text"
+                            name="company"
+                            value="{{ contact_form.company }}"
+                            placeholder="Optional"
+                        >
+                    </div>
+                </div>
+
+                <div class="field-stack">
+                    <label for="contact_subject">Subject</label>
+                    <input
+                        id="contact_subject"
+                        type="text"
+                        name="subject"
+                        value="{{ contact_form.subject }}"
+                        placeholder="How can I help?"
+                    >
+                </div>
+
+                <div class="field-stack">
+                    <label for="contact_message">Message</label>
+                    <textarea
+                        id="contact_message"
+                        name="message"
+                        class="textarea-tall"
+                        placeholder="Write your message here"
+                    >{{ contact_form.message }}</textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="button button-primary">Send message</button>
+                </div>
+            </form>
+        </article>
+    </section>
+</div>
+{% endblock %}

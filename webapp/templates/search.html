@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Skill Search · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="page-header split-header">
+        <div>
+            <div class="eyebrow">Skill-based discovery</div>
+            <h1 class="page-title">Find roles that actually match the stack you want</h1>
+            <p class="page-lead">
+                Search by comma-separated skills and the app will rank jobs using exact overlap plus text similarity.
+            </p>
+        </div>
+
+        <div class="info-panel">
+            <div class="panel-kicker">How ranking works</div>
+            <p>
+                Jobs score higher when more of your skills appear in the title, description, search query, and role context.
+            </p>
+        </div>
+    </section>
+
+    {% if message %}
+        <div class="alert alert-warning">{{ message }}</div>
+    {% endif %}
+
+    <section class="panel">
+        <div class="panel-header">
+            <div class="panel-kicker">Search input</div>
+            <h2 class="panel-title">Describe the skills you care about</h2>
+            <p class="panel-copy">Try combinations like Python, SQL, TensorFlow, MLOps, NLP, backend, or data analysis.</p>
+        </div>
+
+        <form method="post" class="form-grid search-form-layout">
+            <div class="field-stack grow-field">
+                <label for="skills">Skills</label>
+                <input
+                    id="skills"
+                    type="text"
+                    name="skills"
+                    placeholder="python, machine learning, tensorflow"
+                    value="{{ skills_input }}"
+                >
+            </div>
+            <div class="field-stack field-action">
+                <label>&nbsp;</label>
+                <button type="submit" class="button button-primary full-width">Search jobs</button>
+            </div>
+        </form>
+    </section>
+
+    {% if results %}
+        <section class="section-block">
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">Results</div>
+                    <h2 class="section-title">{{ results|length }} matching role{{ '' if results|length == 1 else 's' }}</h2>
+                </div>
+            </div>
+
+            <div class="results-list">
+                {% for job in results %}
+                    <article class="job-card search-card">
+                        <div class="job-card-top">
+                            <div class="job-card-main">
+                                <h3 class="job-card-title">{{ job.title }}</h3>
+                                <div class="job-meta-line">
+                                    <strong>{{ job.company }}</strong>
+                                    {% if job.location %}<span>{{ job.location }}</span>{% endif %}
+                                    {% if job.source %}<span>{{ job.source|capitalize }}</span>{% endif %}
+                                </div>
+                            </div>
+
+                            <div class="score-panel">
+                                <div class="score-label">Final score</div>
+                                <div class="score-value">
+                                    {% if job.final_score is defined %}
+                                        {{ "%.3f"|format(job.final_score) }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="token-row">
+                            <span class="token accent">Match {{ job.match_score if job.match_score is defined else 0 }}</span>
+                            {% if job.role_category %}
+                                <span class="token warm">{{ job.role_category }}</span>
+                            {% endif %}
+                            {% if job.employment_status %}
+                                <span class="token soft">{{ job.employment_status }}</span>
+                            {% endif %}
+                            {% if job.salary %}
+                                <span class="token positive">Salary {{ job.salary }}</span>
+                            {% elif job.Salary %}
+                                <span class="token positive">Salary {{ job.Salary }}</span>
+                            {% endif %}
+                        </div>
+
+                        {% if job.matched_skills %}
+                            <p class="callout-line">
+                                <strong>Matched skills:</strong> {{ job.matched_skills }}
+                            </p>
+                        {% endif %}
+
+                        {% if job.description %}
+                            <p class="job-card-desc">
+                                {{ job.description[:260] }}{% if job.description|length > 260 %}...{% endif %}
+                            </p>
+                        {% endif %}
+
+                        <div class="job-card-footer">
+                            {% if job.job_url %}
+                                <a href="{{ job.job_url }}" class="button button-secondary" target="_blank" rel="noopener">
+                                    View job
+                                </a>
+                            {% endif %}
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        </section>
+    {% elif skills_input %}
+        <div class="empty-panel">
+            <h3>No jobs matched those skills yet</h3>
+            <p>Try broader skill terms, remove niche phrasing, or scrape more listings to widen the pool.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

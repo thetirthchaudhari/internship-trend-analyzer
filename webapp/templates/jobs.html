@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Jobs · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="page-header">
+        <div class="eyebrow">Job inventory</div>
+        <h1 class="page-title">Browse the scraped role library</h1>
+        <p class="page-lead">
+            Filter by source, role category, or free-text search to explore the software roles currently in the dataset.
+        </p>
+    </section>
+
+    <section class="panel filter-panel">
+        <div class="panel-header">
+            <div class="panel-kicker">Filters</div>
+            <h2 class="panel-title">Refine the view</h2>
+            <p class="panel-copy">These filters work across the already scraped dataset and update the job list below.</p>
+        </div>
+
+        <form method="get" class="form-grid four-col">
+            <div class="field-stack">
+                <label for="source">Source</label>
+                <select id="source" name="source">
+                    <option value="all" {% if source == 'all' %}selected{% endif %}>All sources</option>
+                    {% for s in sources %}
+                        <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field-stack">
+                <label for="category">Role category</label>
+                <select id="category" name="category">
+                    <option value="all" {% if category == 'all' %}selected{% endif %}>All categories</option>
+                    {% for c in categories %}
+                        <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field-stack">
+                <label for="q">Search text</label>
+                <input
+                    id="q"
+                    type="text"
+                    name="q"
+                    value="{{ search }}"
+                    placeholder="Title, company, or description"
+                >
+            </div>
+
+            <div class="field-stack field-action">
+                <label>&nbsp;</label>
+                <button type="submit" class="button button-primary full-width">Apply filters</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">Results</div>
+                <h2 class="section-title">{{ total }} role{{ '' if total == 1 else 's' }} found</h2>
+                <p class="section-copy">Showing {{ jobs|length }} result{{ '' if jobs|length == 1 else 's' }} on this page.</p>
+            </div>
+        </div>
+
+        {% if jobs %}
+            <div class="results-list">
+                {% for job in jobs %}
+                    <article class="job-card">
+                        <div class="job-card-top">
+                            <div class="job-card-main">
+                                <h3 class="job-card-title">{{ job.title }}</h3>
+                                <div class="job-meta-line">
+                                    <strong>{{ job.company }}</strong>
+                                    {% if job.location %}<span>{{ job.location }}</span>{% endif %}
+                                    {% if job.source %}<span>{{ job.source|capitalize }}</span>{% endif %}
+                                </div>
+                            </div>
+
+                            <div class="job-side-stat">
+                                <span class="stat-chip positive">{{ job.salary or job.Salary or "Salary not listed" }}</span>
+                            </div>
+                        </div>
+
+                        <div class="token-row">
+                            <span class="token warm">{{ job.role_category or "General" }}</span>
+                            {% if job.employment_status %}
+                                <span class="token accent">{{ job.employment_status }}</span>
+                            {% endif %}
+                            <span class="token soft">{{ job.scraped_at or "Timestamp unavailable" }}</span>
+                        </div>
+
+                        <p class="job-card-desc">
+                            {% if job.description %}
+                                {{ job.description[:240] }}{% if job.description|length > 240 %}...{% endif %}
+                            {% else %}
+                                No description was captured for this role yet.
+                            {% endif %}
+                        </p>
+
+                        <div class="job-card-footer">
+                            {% if job.job_url %}
+                                <a href="{{ job.job_url }}" class="button button-secondary" target="_blank" rel="noopener">
+                                    Open original listing
+                                </a>
+                            {% endif %}
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-panel">
+                <h3>No jobs matched the current filters</h3>
+                <p>Try clearing one filter, broadening the search text, or running another scrape from the scrape studio.</p>
+            </div>
+        {% endif %}
+    </section>
+
+    <nav class="pagination-bar" aria-label="Pagination">
+        {% if page > 1 %}
+            <a class="button button-ghost" href="{{ url_for('jobs', page=page-1, source=source, category=category, q=search) }}">
+                Previous page
+            </a>
+        {% else %}
+            <span class="button button-disabled">Previous page</span>
+        {% endif %}
+
+        <span class="pagination-status">Page {{ page }}</span>
+
+        {% if total > page * page_size %}
+            <a class="button button-ghost" href="{{ url_for('jobs', page=page+1, source=source, category=category, q=search) }}">
+                Next page
+            </a>
+        {% else %}
+            <span class="button button-disabled">Next page</span>
+        {% endif %}
+    </nav>
+</div>
+{% endblock %}

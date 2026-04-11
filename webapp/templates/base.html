@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Internship Trend Analyzer{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+        const root = document.documentElement;
+        root.classList.add("js-motion");
+
+        if (
+            !window.matchMedia ||
+            !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ) {
+            root.classList.add("page-intro-ready");
+        }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="site-shell">
+        <header class="site-header">
+            <div class="shell-inner topbar">
+                <a href="{{ url_for('dashboard') }}" class="brand">
+                    <span class="brand-mark">IA</span>
+                    <span class="brand-copy">
+                        <strong class="brand-title">Internship Analyzer</strong>
+                        <span>Scraped roles, salary signals, and search intelligence</span>
+                    </span>
+                </a>
+
+                <nav class="site-nav" aria-label="Primary navigation">
+                    <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                        Dashboard
+                    </a>
+                    <a href="{{ url_for('scrape_page') }}" class="nav-link {% if request.endpoint == 'scrape_page' %}active{% endif %}">
+                        Scrape
+                    </a>
+                    <a href="{{ url_for('jobs') }}" class="nav-link {% if request.endpoint == 'jobs' %}active{% endif %}">
+                        Jobs
+                    </a>
+                    <a href="{{ url_for('search') }}" class="nav-link {% if request.endpoint == 'search' %}active{% endif %}">
+                        Skill Search
+                    </a>
+                    <a href="{{ url_for('prediction') }}" class="nav-link {% if request.endpoint == 'prediction' %}active{% endif %}">
+                        Salary Predictor
+                    </a>
+                    <a href="{{ url_for('about') }}" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">
+                        About
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="site-main">
+            <div class="shell-inner main-shell">
+                <div class="flash-stack">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                </div>
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+
+        <footer class="site-footer">
+            <div class="shell-inner footer-inner">
+                <div>
+                    <strong>Internship Trend Analyzer</strong>
+                    <span>Flask interface for scraped software hiring intelligence.</span>
+                </div>
+                <div class="footer-note">
+                    &copy; {{ current_year }} · Built by {{ site_owner_name }}
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    {% block extra_scripts %}{% endblock %}
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const root = document.documentElement;
+        const startupTarget = document.querySelector(
+            ".page-stack > .hero-panel:first-child, .page-stack > .page-header:first-child"
+        );
+        const siteNav = document.querySelector(".site-nav");
+        const brandTarget = document.querySelector(".brand");
+        const brandTitle = document.querySelector(".brand-title");
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const allMotionTargets = Array.from(document.querySelectorAll(
+            ".topbar, .flash-stack .alert, .page-header, .hero-panel, .section-heading, .panel, .metric-card, .latest-card, .job-card, .example-card, .info-panel, .empty-panel, .result-hero, .pagination-bar"
+        ));
+
+        if (startupTarget) {
+            startupTarget.classList.add("startup-mask-target", "motion-visible");
+        } else {
+            root.classList.remove("page-intro-ready");
+        }
+
+        const motionTargets = allMotionTargets.filter((element) => {
+            if (!startupTarget) {
+                return true;
+            }
+
+            return element !== startupTarget && !startupTarget.contains(element);
+        });
+
+        motionTargets.forEach((element, index) => {
+            element.classList.add("motion-reveal");
+            element.style.setProperty("--motion-delay", `${Math.min((index % 6) * 80, 400)}ms`);
+        });
+
+        function syncNavIndicator() {
+            if (!siteNav || window.innerWidth <= 560) {
+                siteNav?.classList.remove("nav-indicator-ready");
+                return;
+            }
+
+            const activeLink = siteNav.querySelector(".nav-link.active");
+
+            if (!activeLink) {
+                siteNav.classList.remove("nav-indicator-ready");
+                return;
+            }
+
+            siteNav.style.setProperty("--nav-indicator-x", `${activeLink.offsetLeft}px`);
+            siteNav.style.setProperty("--nav-indicator-y", `${activeLink.offsetTop}px`);
+            siteNav.style.setProperty("--nav-indicator-width", `${activeLink.offsetWidth}px`);
+            siteNav.style.setProperty("--nav-indicator-height", `${activeLink.offsetHeight}px`);
+            siteNav.classList.add("nav-indicator-ready");
+        }
+
+        if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+            motionTargets.forEach((element) => element.classList.add("motion-visible"));
+        } else {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (!entry.isIntersecting) {
+                            return;
+                        }
+
+                        entry.target.classList.add("motion-visible");
+                        observer.unobserve(entry.target);
+                    });
+                },
+                {
+                    threshold: 0.14,
+                    rootMargin: "0px 0px -8% 0px",
+                }
+            );
+
+            motionTargets.forEach((element) => observer.observe(element));
+        }
+
+        syncNavIndicator();
+        window.addEventListener("resize", () => {
+            window.requestAnimationFrame(syncNavIndicator);
+        }, { passive: true });
+        window.addEventListener("load", () => {
+            window.requestAnimationFrame(syncNavIndicator);
+        }, { passive: true });
+
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready
+                .then(() => {
+                    window.requestAnimationFrame(syncNavIndicator);
+                })
+                .catch(() => undefined);
+        }
+
+        const navActiveLink = siteNav?.querySelector(".nav-link.active");
+        if (siteNav && navActiveLink && "ResizeObserver" in window) {
+            const navResizeObserver = new ResizeObserver(() => {
+                window.requestAnimationFrame(syncNavIndicator);
+            });
+            navResizeObserver.observe(siteNav);
+            navResizeObserver.observe(navActiveLink);
+        }
+
+        if (prefersReducedMotion || !startupTarget || !brandTarget || !brandTitle) {
+            root.classList.remove("page-intro-ready", "page-intro-active");
+            root.classList.add("page-intro-done");
+            return;
+        }
+
+        let introBrand = null;
+        let introTimeoutId = null;
+
+        function finishIntro() {
+            if (introTimeoutId) {
+                window.clearTimeout(introTimeoutId);
+                introTimeoutId = null;
+            }
+
+            root.classList.remove("page-intro-ready", "page-intro-active");
+            root.classList.add("page-intro-done");
+
+            if (introBrand) {
+                introBrand.remove();
+                introBrand = null;
+            }
+        }
+
+        function positionIntroBrand() {
+            if (!introBrand) {
+                return;
+            }
+
+            const introRect = introBrand.getBoundingClientRect();
+            const targetRect = brandTarget.getBoundingClientRect();
+
+            if (!introRect.width || !targetRect.width) {
+                return;
+            }
+
+            const dx = (targetRect.left + targetRect.width / 2) - (introRect.left + introRect.width / 2);
+            const dy = (targetRect.top + targetRect.height / 2) - (introRect.top + introRect.height / 2);
+            const scale = targetRect.width / introRect.width;
+
+            introBrand.style.setProperty("--intro-brand-dx", `${dx}px`);
+            introBrand.style.setProperty("--intro-brand-dy", `${dy}px`);
+            introBrand.style.setProperty("--intro-brand-scale", `${Math.min(Math.max(scale, 0.22), 0.72)}`);
+        }
+
+        function startIntro() {
+            introBrand = document.createElement("div");
+            introBrand.className = "page-intro-brand";
+            introBrand.setAttribute("aria-hidden", "true");
+            introBrand.textContent = brandTitle.textContent.trim() || "Internship Analyzer";
+            document.body.appendChild(introBrand);
+
+            positionIntroBrand();
+
+            window.requestAnimationFrame(() => {
+                positionIntroBrand();
+                root.classList.add("page-intro-active");
+            });
+
+            introTimeoutId = window.setTimeout(finishIntro, 1680);
+        }
+
+        const fontReady =
+            document.fonts && document.fonts.ready
+                ? document.fonts.ready.catch(() => undefined)
+                : Promise.resolve();
+
+        fontReady.then(() => {
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(startIntro);
+            });
+        });
+    });
+    </script>
+</body>
+</html>

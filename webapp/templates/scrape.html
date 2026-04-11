@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Scrape Studio · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="hero-panel">
+        <div class="hero-copy">
+            <div class="eyebrow">Scrape studio</div>
+            <h1 class="hero-title">Launch targeted LinkedIn and Naukri collection runs.</h1>
+            <p class="page-lead">
+                Use presets for software-role families, add your own custom queries, and decide which optional fields
+                should be saved alongside each job.
+            </p>
+
+            <div class="hero-actions">
+                <a href="{{ url_for('dashboard') }}" class="button button-primary">Back to dashboard</a>
+                <a href="{{ url_for('jobs') }}" class="button button-secondary">Browse saved jobs</a>
+            </div>
+        </div>
+
+        <div class="hero-signal">
+            <div class="signal-panel">
+                <div class="panel-kicker">Dataset status</div>
+                <div class="signal-value">{{ stats.total_jobs }}</div>
+                <div class="signal-label">jobs currently stored before the next scraping run</div>
+
+                <div class="signal-meta">
+                    <div>
+                        <span class="signal-meta-label">Last refresh</span>
+                        <strong>
+                            {% if stats.last_updated %}
+                                {{ stats.last_updated.strftime("%Y-%m-%d %H:%M") }}
+                            {% else %}
+                                No scrape yet
+                            {% endif %}
+                        </strong>
+                    </div>
+                    <div>
+                        <span class="signal-meta-label">Sources tracked</span>
+                        <strong>{{ stats.by_source|length }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">Collection controls</div>
+                <h2 class="section-title">Choose where the next batch of roles comes from</h2>
+                <p class="section-copy">
+                    LinkedIn is useful for richer role descriptions, while Naukri is helpful for broader hiring-market coverage.
+                </p>
+            </div>
+        </div>
+
+        <div class="panel-grid two-up">
+            <article class="panel">
+                <div class="panel-header">
+                    <div class="panel-kicker">LinkedIn</div>
+                    <h3 class="panel-title">Focused role harvesting</h3>
+                    <p class="panel-copy">
+                        Good for richer descriptions and live role phrasing across internship and full-time software hiring.
+                    </p>
+                </div>
+
+                <form method="post" action="{{ url_for('trigger_linkedin_scrape') }}" class="stack-form">
+                    <div class="form-grid two-col">
+                        <div class="field-stack">
+                            <label for="li_jobs_per_query">Jobs per query</label>
+                            <select id="li_jobs_per_query" name="jobs_per_query">
+                                {% for n in [3, 5, 10, 15, 20] %}
+                                    <option value="{{ n }}" {% if n == 3 %}selected{% endif %}>{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="field-stack">
+                            <label for="li_cookie">`li_at` cookie</label>
+                            <input id="li_cookie" type="text" name="li_at_cookie" placeholder="Optional session cookie">
+                        </div>
+                    </div>
+
+                    <label class="checkbox-inline">
+                        <input type="checkbox" name="headed">
+                        <span>Show the browser while scraping</span>
+                    </label>
+                    <div class="hint">Leave this off for background-style runs. Turn it on when you want to watch the flow.</div>
+
+                    <div class="field-stack">
+                        <label for="linkedin_custom_queries">Custom queries</label>
+                        <textarea
+                            id="linkedin_custom_queries"
+                            name="linkedin_custom_queries"
+                            class="textarea-tall"
+                            placeholder="frontend developer intern&#10;backend developer&#10;security engineer"
+                        ></textarea>
+                        <div class="hint">One role per line. Presets include both internship and full-time role families.</div>
+                    </div>
+
+                    <div class="advanced-panel">
+                        <details open>
+                            <summary>Preset LinkedIn queries</summary>
+                            <div class="choice-groups">
+                                {% for cat, label in CATEGORY_LABELS.items() %}
+                                    {% set queries = linkedin_queries.get(cat, []) %}
+                                    {% if queries %}
+                                        <div class="choice-group">
+                                            <div class="choice-group-title">{{ label }}</div>
+                                            <div class="chip-grid">
+                                                {% for q in queries %}
+                                                    <label class="choice-chip">
+                                                        <input type="checkbox" name="linkedin_queries" value="{{ q }}">
+                                                        <span>{{ q }}</span>
+                                                    </label>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </details>
+                    </div>
+
+                    <div class="field-stack">
+                        <label>Optional fields to save</label>
+                        <input type="hidden" name="linkedin_fields_present" value="1">
+                        <div class="chip-grid">
+                            {% for field_name, field_label in linkedin_field_options %}
+                                <label class="choice-chip">
+                                    <input type="checkbox" name="linkedin_fields" value="{{ field_name }}" checked>
+                                    <span>{{ field_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <div class="hint">Core fields such as title, company, source, location, and timestamp are always preserved.</div>
+                    </div>
+
+                    <button type="submit" class="button button-primary full-width">Scrape LinkedIn</button>
+                </form>
+            </article>
+
+            <article class="panel">
+                <div class="panel-header">
+                    <div class="panel-kicker">Naukri</div>
+                    <h3 class="panel-title">Role-market capture</h3>
+                    <p class="panel-copy">
+                        Useful for a broader software pipeline, from internship discovery to full-time hiring signals.
+                    </p>
+                </div>
+
+                <form method="post" action="{{ url_for('trigger_naukri_scrape') }}" class="stack-form">
+                    <div class="form-grid one-col">
+                        <div class="field-stack">
+                            <label for="nk_jobs_per_query">Jobs per query</label>
+                            <select id="nk_jobs_per_query" name="jobs_per_query">
+                                {% for n in [3, 5, 10, 15, 20] %}
+                                    <option value="{{ n }}" {% if n == 3 %}selected{% endif %}>{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <label class="checkbox-inline">
+                        <input type="checkbox" name="headed">
+                        <span>Show the browser while scraping</span>
+                    </label>
+                    <div class="hint">Naukri scraping often benefits from a visible session when login or overlays get in the way.</div>
+
+                    <div class="field-stack">
+                        <label for="naukri_custom_queries">Custom queries</label>
+                        <textarea
+                            id="naukri_custom_queries"
+                            name="naukri_custom_queries"
+                            class="textarea-tall"
+                            placeholder="data engineer&#10;qa engineer&#10;mobile developer intern"
+                        ></textarea>
+                        <div class="hint">One role per line. Internship-like queries keep the internship filter; full-time queries run without it.</div>
+                    </div>
+
+                    <div class="advanced-panel">
+                        <details open>
+                            <summary>Preset Naukri queries</summary>
+                            <div class="choice-groups">
+                                {% for cat, label in CATEGORY_LABELS.items() %}
+                                    {% set queries = naukri_queries.get(cat, []) %}
+                                    {% if queries %}
+                                        <div class="choice-group">
+                                            <div class="choice-group-title">{{ label }}</div>
+                                            <div class="chip-grid">
+                                                {% for q in queries %}
+                                                    <label class="choice-chip">
+                                                        <input type="checkbox" name="naukri_queries" value="{{ q }}">
+                                                        <span>{{ q }}</span>
+                                                    </label>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </details>
+                    </div>
+
+                    <div class="field-stack">
+                        <label>Optional fields to save</label>
+                        <input type="hidden" name="naukri_fields_present" value="1">
+                        <div class="chip-grid">
+                            {% for field_name, field_label in naukri_field_options %}
+                                <label class="choice-chip">
+                                    <input type="checkbox" name="naukri_fields" value="{{ field_name }}" checked>
+                                    <span>{{ field_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <div class="hint">Salary and duration fields matter here, especially for better stipend prediction quality.</div>
+                    </div>
+
+                    <button type="submit" class="button button-primary full-width">Scrape Naukri</button>
+                </form>
+            </article>
+        </div>
+    </section>
+</div>
+{% endblock %}

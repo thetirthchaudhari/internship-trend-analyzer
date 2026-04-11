@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="hero-panel">
+        <div class="hero-copy">
+            <div class="eyebrow">Software hiring intelligence</div>
+            <h1 class="hero-title">Track the market, then decide what to scrape next.</h1>
+            <p class="page-lead">
+                The dashboard keeps the current dataset, source mix, role categories, and latest additions in one place.
+                When you want to collect more roles, jump into the dedicated scrape studio.
+            </p>
+
+            <div class="hero-actions">
+                <a href="{{ url_for('scrape_page') }}" class="button button-primary">Open scrape studio</a>
+                <a href="{{ url_for('jobs') }}" class="button button-secondary">Browse job inventory</a>
+            </div>
+        </div>
+
+        <div class="hero-signal">
+            <div class="signal-panel">
+                <div class="panel-kicker">System pulse</div>
+                <div class="signal-value">{{ stats.total_jobs }}</div>
+                <div class="signal-label">jobs currently available in the dataset</div>
+
+                <div class="signal-meta">
+                    <div>
+                        <span class="signal-meta-label">Last refresh</span>
+                        <strong>
+                            {% if stats.last_updated %}
+                                {{ stats.last_updated.strftime("%Y-%m-%d %H:%M") }}
+                            {% else %}
+                                No scrape yet
+                            {% endif %}
+                        </strong>
+                    </div>
+                    <div>
+                        <span class="signal-meta-label">Sources tracked</span>
+                        <strong>{{ stats.by_source|length }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">Quick snapshot</div>
+                <h2 class="section-title">See what the dataset looks like right now</h2>
+            </div>
+        </div>
+
+        <div class="metric-grid">
+            <article class="metric-card">
+                <div class="metric-label">Total jobs in DB</div>
+                <div class="metric-value">{{ stats.total_jobs }}</div>
+                <div class="metric-note">Live count from the current storage layer.</div>
+            </article>
+
+            <article class="metric-card">
+                <div class="metric-label">By source</div>
+                {% if stats.by_source %}
+                    <div class="token-row">
+                        {% for src, cnt in stats.by_source.items() %}
+                            <span class="token">
+                                <span class="token-dot"></span>
+                                {{ src|capitalize }}
+                                <strong>{{ cnt }}</strong>
+                            </span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-copy">Run a scrape to populate source splits.</div>
+                {% endif %}
+            </article>
+
+            <article class="metric-card">
+                <div class="metric-label">Top categories</div>
+                {% if top_categories %}
+                    <div class="token-row">
+                        {% for cat, cnt in top_categories %}
+                            <span class="token warm">
+                                {{ CATEGORY_LABELS.get(cat, cat) }}
+                                <strong>{{ cnt }}</strong>
+                            </span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-copy">Category insights appear after scraping.</div>
+                {% endif %}
+            </article>
+
+            <article class="metric-card">
+                <div class="metric-label">Next action</div>
+                <div class="metric-note">
+                    Use the scrape page to refresh inventory, then return here to review what changed.
+                </div>
+                <div class="mini-action-row">
+                    <a href="{{ url_for('scrape_page') }}" class="button button-ghost">Scrape roles</a>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">Workflow lanes</div>
+                <h2 class="section-title">Move from collection to analysis</h2>
+                <p class="section-copy">
+                    Each workflow now has its own page, so scraping and analysis stay easier to navigate.
+                </p>
+            </div>
+        </div>
+
+        <div class="panel-grid two-up">
+            <article class="info-panel">
+                <div class="panel-kicker">Collect</div>
+                <h3 class="panel-title">Scrape studio</h3>
+                <p>Launch LinkedIn and Naukri runs with preset software-role families and custom queries.</p>
+                <div class="mini-action-row">
+                    <a href="{{ url_for('scrape_page') }}" class="button button-secondary">Go to scrape</a>
+                </div>
+            </article>
+
+            <article class="info-panel">
+                <div class="panel-kicker">Browse</div>
+                <h3 class="panel-title">Job inventory</h3>
+                <p>Filter the stored dataset by source, role category, and text search to inspect the latest roles.</p>
+                <div class="mini-action-row">
+                    <a href="{{ url_for('jobs') }}" class="button button-secondary">Open jobs</a>
+                </div>
+            </article>
+
+            <article class="info-panel">
+                <div class="panel-kicker">Match</div>
+                <h3 class="panel-title">Skill search</h3>
+                <p>Search the job pool by your stack and quickly surface roles with stronger skill overlap.</p>
+                <div class="mini-action-row">
+                    <a href="{{ url_for('search') }}" class="button button-secondary">Search by skills</a>
+                </div>
+            </article>
+
+            <article class="info-panel">
+                <div class="panel-kicker">Estimate</div>
+                <h3 class="panel-title">Salary predictor</h3>
+                <p>Use retrieved salary evidence and scraped role context to estimate compensation ranges.</p>
+                <div class="mini-action-row">
+                    <a href="{{ url_for('prediction') }}" class="button button-secondary">Predict salary</a>
+                    <a href="{{ url_for('about') }}" class="button button-ghost">About the project</a>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">Recent additions</div>
+                <h2 class="section-title">Latest jobs in the dataset</h2>
+            </div>
+            <a href="{{ url_for('jobs') }}" class="button button-ghost">Open full job library</a>
+        </div>
+
+        {% if latest_jobs %}
+            <div class="latest-grid">
+                {% for job in latest_jobs %}
+                    <article class="latest-card">
+                        <div class="latest-card-top">
+                            <div>
+                                <h3>
+                                    {% if job.job_url %}
+                                        <a href="{{ job.job_url }}" target="_blank" rel="noopener">{{ job.title }}</a>
+                                    {% else %}
+                                        {{ job.title }}
+                                    {% endif %}
+                                </h3>
+                                <div class="job-meta-line">
+                                    <strong>{{ job.company }}</strong>
+                                    {% if job.location %}<span>{{ job.location }}</span>{% endif %}
+                                </div>
+                            </div>
+                            <span class="token soft">{{ job.source|capitalize }}</span>
+                        </div>
+
+                        <div class="token-row">
+                            <span class="token warm">{{ CATEGORY_LABELS.get(job.role_category, job.role_category or "General") }}</span>
+                            {% if job.employment_status %}
+                                <span class="token accent">{{ job.employment_status }}</span>
+                            {% endif %}
+                            <span class="token soft">
+                                {% if job.scraped_at %}
+                                    {{ job.scraped_at.strftime("%Y-%m-%d %H:%M") if job.scraped_at.strftime is defined else job.scraped_at }}
+                                {% else %}
+                                    Timestamp unavailable
+                                {% endif %}
+                            </span>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-panel">
+                <h3>No jobs yet</h3>
+                <p>Use the scrape studio to populate the dataset and unlock the rest of the workflow.</p>
+            </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

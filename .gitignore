@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Database / temp files
+*.sqlite3
+*.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build / cache
+*.cache/
