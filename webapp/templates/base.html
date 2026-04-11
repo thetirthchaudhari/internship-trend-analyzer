@@ -19,7 +19,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
     {% block extra_head %}{% endblock %}
@@ -248,11 +248,22 @@
 
             window.requestAnimationFrame(() => {
                 positionIntroBrand();
-                root.classList.add("page-intro-active");
+                window.requestAnimationFrame(() => {
+                    positionIntroBrand();
+                    root.classList.add("page-intro-active");
+                });
             });
 
-            introTimeoutId = window.setTimeout(finishIntro, 1680);
+            introTimeoutId = window.setTimeout(finishIntro, 1280);
         }
+
+        window.addEventListener("resize", () => {
+            if (!introBrand) {
+                return;
+            }
+
+            window.requestAnimationFrame(positionIntroBrand);
+        }, { passive: true });
 
         const fontReady =
             document.fonts && document.fonts.ready

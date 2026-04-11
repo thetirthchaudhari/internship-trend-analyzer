@@ -7,10 +7,10 @@
     <section class="hero-panel">
         <div class="hero-copy">
             <div class="eyebrow">Software hiring intelligence platform</div>
-            <h1 class="hero-title">Command the full internship hiring workflow from one operating surface.</h1>
+            <h1 class="hero-title">Read the hiring market through one calm operating layer.</h1>
             <p class="page-lead">
-                This dashboard unifies scraping, storage, search, ranking, and salary intelligence into a single product view.
-                It helps you audit dataset health, monitor source coverage, and move directly into the next analysis step.
+                Internship Analyzer brings scraping, browsing, matching, and salary context into one restrained interface
+                so every workflow feels connected instead of stitched together.
             </p>
 
             <div class="hero-actions">
@@ -75,9 +75,9 @@
         <div class="section-heading">
             <div>
                 <div class="eyebrow">System overview</div>
-                <h2 class="section-title section-title-row">{{ ui_icon('dashboard', 'section-icon') }} See what the dataset looks like right now</h2>
+                <h2 class="section-title section-title-row">{{ ui_icon('dashboard', 'section-icon') }} What the platform is holding right now</h2>
                 <p class="section-copy">
-                    Core inventory metrics, source balance, and category concentration are grouped here so the platform reads like a true monitoring dashboard.
+                    Core inventory signals, source balance, and category concentration are arranged like a modern control surface instead of a simple stats strip.
                 </p>
             </div>
         </div>
@@ -153,9 +153,9 @@
         <div class="section-heading">
             <div>
                 <div class="eyebrow">Workflow lanes</div>
-                <h2 class="section-title section-title-row">{{ ui_icon('workflow', 'section-icon') }} Move from collection to analysis</h2>
+                <h2 class="section-title section-title-row">{{ ui_icon('workflow', 'section-icon') }} Move from collection to interpretation</h2>
                 <p class="section-copy">
-                    Each module now behaves like one station in a larger product workflow, making the project read as a real system with collection, browsing, matching, and prediction layers.
+                    Each page behaves like part of one deliberate product journey, making the project feel layered, connected, and built with real scope.
                 </p>
             </div>
         </div>
@@ -216,51 +216,57 @@
     <section class="section-block">
         <div class="section-heading">
             <div>
-                <div class="eyebrow">Recent additions</div>
-                <h2 class="section-title section-title-row">{{ ui_icon('jobs', 'section-icon') }} Latest jobs in the dataset</h2>
+                <div class="eyebrow">Live market feed</div>
+                <h2 class="section-title section-title-row">{{ ui_icon('jobs', 'section-icon') }} Fresh roles entering the system</h2>
                 <p class="section-copy">
-                    Fresh rows provide visible proof that the collection pipeline is active and that the downstream modules are backed by real stored data.
+                    New rows give visible proof that the collection layer is alive and that every downstream module is grounded in stored evidence.
                 </p>
             </div>
             <a href="{{ url_for('jobs') }}" class="button button-ghost">Open full job library</a>
         </div>
 
         {% if latest_jobs %}
-            <div class="latest-grid">
-                {% for job in latest_jobs %}
-                    <article class="latest-card">
-                        <div class="latest-card-top">
-                            <div>
-                                <h3>
-                                    {% if job.job_url %}
-                                        <a href="{{ job.job_url }}" target="_blank" rel="noopener">{{ job.title }}</a>
-                                    {% else %}
-                                        {{ job.title }}
-                                    {% endif %}
-                                </h3>
-                                <div class="job-meta-line">
-                                    <strong>{{ job.company }}</strong>
-                                    {% if job.location %}<span>{{ job.location }}</span>{% endif %}
-                                </div>
-                            </div>
-                            <span class="token soft">{{ job.source|capitalize }}</span>
-                        </div>
+            <div class="activity-feed-shell">
+                <div class="activity-feed-meta">
+                    <div class="activity-feed-kicker">{{ ui_icon('signal', 'panel-inline-icon') }} Live job feed</div>
+                    <p>Latest captured roles flowing in from the active dataset, keeping the dashboard visibly current.</p>
+                </div>
 
-                        <div class="token-row">
-                            <span class="token warm">{{ CATEGORY_LABELS.get(job.role_category, job.role_category or "General") }}</span>
-                            {% if job.employment_status %}
-                                <span class="token accent">{{ job.employment_status }}</span>
-                            {% endif %}
-                            <span class="token soft">
-                                {% if job.scraped_at %}
-                                    {{ job.scraped_at.strftime("%Y-%m-%d %H:%M") if job.scraped_at.strftime is defined else job.scraped_at }}
-                                {% else %}
-                                    Timestamp unavailable
-                                {% endif %}
-                            </span>
-                        </div>
-                    </article>
-                {% endfor %}
+                <div class="activity-feed-strip">
+                    <div class="latest-grid latest-feed-grid">
+                        {% for job in latest_jobs %}
+                            <article class="latest-card activity-card">
+                                <div class="activity-card-top">
+                                    <span class="activity-status">
+                                        <span class="activity-pulse"></span>
+                                        {{ job.source|capitalize }}
+                                    </span>
+                                </div>
+
+                                <div class="activity-card-main">
+                                    <h3>
+                                        {% if job.job_url %}
+                                            <a href="{{ job.job_url }}" target="_blank" rel="noopener">{{ job.title }}</a>
+                                        {% else %}
+                                            {{ job.title }}
+                                        {% endif %}
+                                    </h3>
+                                    <p class="activity-company">{{ job.company }}</p>
+                                    {% if job.location %}
+                                        <p class="activity-location">{{ job.location }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <div class="activity-card-foot">
+                                    <span class="token warm">{{ CATEGORY_LABELS.get(job.role_category, job.role_category or "General") }}</span>
+                                    {% if job.employment_status %}
+                                        <span class="token accent">{{ job.employment_status }}</span>
+                                    {% endif %}
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         {% else %}
             <div class="empty-panel">

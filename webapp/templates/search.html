@@ -7,10 +7,14 @@
     <section class="page-header split-header">
         <div>
             <div class="eyebrow">Skill-based discovery</div>
-            <h1 class="page-title">Use the matching layer to surface roles that genuinely fit your stack.</h1>
+            <h1 class="page-title">Match your stack against live roles, not static examples.</h1>
             <p class="page-lead">
-                Search by comma-separated skills and the app ranks stored roles using explicit overlap plus description-level text similarity.
+                Search by comma-separated skills and let the app rank stored roles using direct overlap, role language, and description-level context.
             </p>
+            <div class="mini-action-row">
+                <a href="{{ url_for('jobs') }}" class="button button-primary">Browse inventory</a>
+                <a href="{{ url_for('prediction') }}" class="button button-secondary">Open salary predictor</a>
+            </div>
         </div>
 
         <div class="info-panel">
@@ -74,11 +78,11 @@
         <section class="section-block">
             <div class="section-heading">
                 <div>
-                    <div class="eyebrow">Results</div>
-                    <h2 class="section-title section-title-row">{{ ui_icon('search', 'section-icon') }} {{ results|length }} matching role{{ '' if results|length == 1 else 's' }}</h2>
-                    <p class="section-copy">Results are sorted so the top cards make the matching engine and ranking outputs visible to the examiner.</p>
-                </div>
+                <div class="eyebrow">Results</div>
+                <h2 class="section-title section-title-row">{{ ui_icon('search', 'section-icon') }} {{ results|length }} matching role{{ '' if results|length == 1 else 's' }}</h2>
+                <p class="section-copy">Results are sorted to make the ranking layer legible, explainable, and easy to evaluate at a glance.</p>
             </div>
+        </div>
 
             <div class="results-list">
                 {% for job in results %}
