@@ -108,6 +108,7 @@ def predict_salary(
             "description_examples": description_examples,
             "salary_corpus_size": 0,
             "used_cerebras": False,
+            "cerebras_status": "not_applicable",
         }
 
     enriched_query = build_enriched_query(
@@ -138,7 +139,7 @@ def predict_salary(
         description_examples=description_examples,
         prefer_internship=prefer_internship,
     )
-    cerebras_result = generate_with_cerebras(
+    cerebras_result, cerebras_status = generate_with_cerebras(
         job_title=job_title,
         job_location=job_location,
         job_description=job_description,
@@ -161,6 +162,7 @@ def predict_salary(
             "selected_scraped_categories": selected_scraped_categories,
             "salary_examples_used": len(salary_examples),
             "used_cerebras": True,
+            "cerebras_status": cerebras_status,
         }
     else:
         result = {
@@ -176,6 +178,7 @@ def predict_salary(
             "selected_scraped_categories": selected_scraped_categories,
             "salary_examples_used": len(salary_examples),
             "used_cerebras": False,
+            "cerebras_status": cerebras_status,
         }
 
     internship_rows = int(salary_df["is_internship_like"].fillna(False).sum())
@@ -762,10 +765,13 @@ def generate_with_cerebras(
     salary_examples: list[dict[str, Any]],
     description_examples: list[dict[str, Any]],
     heuristic_prediction: str,
-) -> dict[str, str] | None:
+) -> tuple[dict[str, str] | None, str]:
     api_key = CEREBRAS_API_KEY
-    if not api_key or not salary_examples:
-        return None
+    if not api_key:
+        return None, "not_configured"
+
+    if not salary_examples:
+        return None, "not_applicable"
 
     model = CEREBRAS_MODEL
 
@@ -837,20 +843,24 @@ def generate_with_cerebras(
             data = json.loads(response.read().decode("utf-8"))
     except (error.URLError, error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
         log.warning("Cerebras prediction fallback activated: %s", exc)
-        return None
+        return None, "failed"
 
     try:
         content = data["choices"][0]["message"]["content"]
         parsed = _load_json_object(content)
     except Exception as exc:
         log.warning("Could not parse Cerebras salary response: %s", exc)
-        return None
+        return None, "failed"
 
-    return {
-        "prediction": str(parsed.get("prediction", "")).strip(),
-        "confidence": str(parsed.get("confidence", "")).strip().lower() or "medium",
-        "summary": str(parsed.get("summary", "")).strip(),
-    }
+    return (
+        {
+            "prediction": str(parsed.get("prediction", "")).strip(),
+            "confidence": str(parsed.get("confidence", "")).strip().lower()
+            or "medium",
+            "summary": str(parsed.get("summary", "")).strip(),
+        },
+        "used",
+    )
 
 
 def looks_like_internship(text: str) -> bool:

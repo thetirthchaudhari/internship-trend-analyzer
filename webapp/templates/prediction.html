@@ -204,13 +204,15 @@
                 <div class="alert alert-warning">{{ result.warning }}</div>
             {% endif %}
 
-            <div class="hint">
-                {% if result.used_cerebras %}
-                    Cerebras refined the final answer after retrieval.
-                {% else %}
-                    This response used local retrieval and heuristics only because Cerebras refinement was unavailable for this run.
-                {% endif %}
-            </div>
+            {% if result.cerebras_status == 'used' or result.cerebras_status == 'failed' %}
+                <div class="hint">
+                    {% if result.cerebras_status == 'used' %}
+                        Cerebras refined the final answer after retrieval.
+                    {% elif result.cerebras_status == 'failed' %}
+                        This response used local retrieval and heuristics only because Cerebras refinement was unavailable for this run.
+                    {% endif %}
+                </div>
+            {% endif %}
         </section>
 
         <section class="section-block">
