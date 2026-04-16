@@ -213,6 +213,12 @@
                     {% endif %}
                 </div>
             {% endif %}
+
+            {% if flask_debug and result.cerebras_status == 'failed' and result.cerebras_error %}
+                <div class="alert alert-warning">
+                    <strong>Cerebras debug:</strong> {{ result.cerebras_error }}
+                </div>
+            {% endif %}
         </section>
 
         <section class="section-block">

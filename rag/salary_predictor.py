@@ -23,6 +23,11 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 
+try:
+    from cerebras.cloud.sdk import Cerebras
+except ImportError:
+    Cerebras = None
+
 from logger import get_logger
 from settings import (
     CATEGORY_LABELS,
@@ -139,7 +144,7 @@ def predict_salary(
         description_examples=description_examples,
         prefer_internship=prefer_internship,
     )
-    cerebras_result, cerebras_status = generate_with_cerebras(
+    cerebras_result, cerebras_status, cerebras_error = generate_with_cerebras(
         job_title=job_title,
         job_location=job_location,
         job_description=job_description,
@@ -163,6 +168,7 @@ def predict_salary(
             "salary_examples_used": len(salary_examples),
             "used_cerebras": True,
             "cerebras_status": cerebras_status,
+            "cerebras_error": None,
         }
     else:
         result = {
@@ -179,6 +185,7 @@ def predict_salary(
             "salary_examples_used": len(salary_examples),
             "used_cerebras": False,
             "cerebras_status": cerebras_status,
+            "cerebras_error": cerebras_error,
         }
 
     internship_rows = int(salary_df["is_internship_like"].fillna(False).sum())
@@ -765,15 +772,13 @@ def generate_with_cerebras(
     salary_examples: list[dict[str, Any]],
     description_examples: list[dict[str, Any]],
     heuristic_prediction: str,
-) -> tuple[dict[str, str] | None, str]:
+) -> tuple[dict[str, str] | None, str, str | None]:
     api_key = CEREBRAS_API_KEY
     if not api_key:
-        return None, "not_configured"
+        return None, "not_configured", None
 
     if not salary_examples:
-        return None, "not_applicable"
-
-    model = CEREBRAS_MODEL
+        return None, "not_applicable", None
 
     salary_context_lines = []
     for idx, example in enumerate(salary_examples, start=1):
@@ -812,55 +817,140 @@ def generate_with_cerebras(
         + "\n\nReturn valid JSON with exactly these keys: prediction, confidence, summary"
     )
 
-    payload = {
-        "model": model,
-        "temperature": 0.2,
-        "max_completion_tokens": 300,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a salary prediction assistant. Ground your answer in the retrieved evidence "
-                    "and respond with strict JSON only."
-                ),
+
+    last_error = "unknown_error"
+
+    for model in _candidate_cerebras_models(CEREBRAS_MODEL):
+        if Cerebras is not None:
+            try:
+                client = _get_cerebras_client(api_key)
+                chat_completion = client.chat.completions.create(
+                    model=model,
+                    temperature=0.2,
+                    max_completion_tokens=300,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a salary prediction assistant. Ground your answer in the retrieved evidence "
+                                "and return only the requested JSON object with prediction, confidence, and summary."
+                            ),
+                        },
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                content = chat_completion.choices[0].message.content
+                parsed = _load_json_object(str(content))
+            except Exception as exc:
+                last_error = str(exc)
+                log.warning(
+                    "Cerebras SDK prediction attempt failed for model %s: %s",
+                    model,
+                    exc,
+                )
+            else:
+                return (
+                    {
+                        "prediction": str(parsed.get("prediction", "")).strip(),
+                        "confidence": str(parsed.get("confidence", "")).strip().lower()
+                        or "medium",
+                        "summary": str(parsed.get("summary", "")).strip(),
+                    },
+                    "used",
+                    None,
+                )
+
+        payload = {
+            "model": model,
+            "temperature": 0.2,
+            "max_completion_tokens": 300,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "salary_prediction",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "prediction": {"type": "string"},
+                            "confidence": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high"],
+                            },
+                            "summary": {"type": "string"},
+                        },
+                        "required": ["prediction", "confidence", "summary"],
+                        "additionalProperties": False,
+                    },
+                },
             },
-            {"role": "user", "content": user_prompt},
-        ],
-    }
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a salary prediction assistant. Ground your answer in the retrieved evidence "
+                        "and return only the requested JSON object."
+                    ),
+                },
+                {"role": "user", "content": user_prompt},
+            ],
+        }
 
-    req = request.Request(
-        "https://api.cerebras.ai/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+        req = request.Request(
+            "https://api.cerebras.ai/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
 
-    try:
-        with request.urlopen(req, timeout=25) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (error.URLError, error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-        log.warning("Cerebras prediction fallback activated: %s", exc)
-        return None, "failed"
+        try:
+            with request.urlopen(req, timeout=25) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            last_error = _read_http_error_body(exc)
+            log.warning(
+                "Cerebras prediction attempt failed for model %s: %s",
+                model,
+                last_error,
+            )
+            continue
+        except (error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            last_error = str(exc)
+            log.warning(
+                "Cerebras prediction attempt failed for model %s: %s",
+                model,
+                exc,
+            )
+            continue
 
-    try:
-        content = data["choices"][0]["message"]["content"]
-        parsed = _load_json_object(content)
-    except Exception as exc:
-        log.warning("Could not parse Cerebras salary response: %s", exc)
-        return None, "failed"
+        try:
+            content = data["choices"][0]["message"]["content"]
+            parsed = _load_json_object(content)
+        except Exception as exc:
+            last_error = str(exc)
+            log.warning(
+                "Could not parse Cerebras salary response for model %s: %s",
+                model,
+                exc,
+            )
+            continue
 
-    return (
-        {
-            "prediction": str(parsed.get("prediction", "")).strip(),
-            "confidence": str(parsed.get("confidence", "")).strip().lower()
-            or "medium",
-            "summary": str(parsed.get("summary", "")).strip(),
-        },
-        "used",
-    )
+        return (
+            {
+                "prediction": str(parsed.get("prediction", "")).strip(),
+                "confidence": str(parsed.get("confidence", "")).strip().lower()
+                or "medium",
+                "summary": str(parsed.get("summary", "")).strip(),
+            },
+            "used",
+            None,
+        )
+
+    log.warning("Cerebras prediction fallback activated after all attempts: %s", last_error)
+    return None, "failed", last_error
 
 
 def looks_like_internship(text: str) -> bool:
@@ -1093,4 +1183,52 @@ def _load_json_object(content: str) -> dict[str, Any]:
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?", "", text).strip()
         text = re.sub(r"```$", "", text).strip()
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            raise
+        return json.loads(match.group(0))
+
+
+@lru_cache(maxsize=1)
+def _get_cerebras_client(api_key: str):
+    if Cerebras is None:
+        raise RuntimeError("cerebras_cloud_sdk is not installed")
+
+    return Cerebras(
+        api_key=api_key,
+        warm_tcp_connection=False,
+    )
+
+
+def _candidate_cerebras_models(preferred_model: str) -> list[str]:
+    candidates = [
+        preferred_model,
+        "qwen-3-235b-a22b-instruct-2507",
+        "gpt-oss-120b",
+        "llama3.1-8b",
+    ]
+    ordered: list[str] = []
+    seen = set()
+
+    for model in candidates:
+        if not model or model in seen:
+            continue
+        ordered.append(model)
+        seen.add(model)
+
+    return ordered
+
+
+def _read_http_error_body(exc: error.HTTPError) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+
+    if body:
+        return f"{exc.code} {exc.reason}: {body}"
+
+    return f"{exc.code} {exc.reason}"

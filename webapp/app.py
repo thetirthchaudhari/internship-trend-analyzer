@@ -102,6 +102,7 @@ def inject_global_template_vars():
     return {
         "app_name": APP_NAME,
         "current_year": datetime.now().year,
+        "flask_debug": FLASK_DEBUG,
         "site_owner_name": SITE_OWNER_NAME,
         "site_owner_email": SITE_OWNER_EMAIL,
         "site_owner_phone": SITE_OWNER_PHONE,

@@ -55,8 +55,7 @@ CONTACT_REQUESTS_COLLECTION_NAME = os.getenv(
 SOURCE_NAME = "linkedin"
 
 # Cerebras
-LOCAL_CEREBRAS_API_KEY = "csk-cmd4m49k5d3ndwxjh45pecxdxd36jn3c8jjtfk2498rp9969"
-CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY") or LOCAL_CEREBRAS_API_KEY
+CEREBRAS_API_KEY = (os.getenv("CEREBRAS_API_KEY") or "").strip() or None
 CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
 
 # Data sources
