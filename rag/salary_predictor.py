@@ -12,6 +12,7 @@ Design:
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -814,16 +815,20 @@ def generate_with_cerebras(
         + "\n".join(salary_context_lines)
         + "\n\nRetrieved scraped description examples:\n"
         + ("\n".join(description_context_lines) if description_context_lines else "None")
-        + "\n\nReturn valid JSON with exactly these keys: prediction, confidence, summary"
+        + "\n\nReturn valid JSON with exactly these keys: prediction, confidence, summary."
+        + "\nPrediction must be a human-readable monthly salary string such as "
+        + "'Rs 32,000 - Rs 42,000 / month' or 'Rs 37,000 / month', not an object."
+        + "\nConfidence must be exactly one of: low, medium, high."
     )
 
 
     last_error = "unknown_error"
 
-    for model in _candidate_cerebras_models(CEREBRAS_MODEL):
-        if Cerebras is not None:
+    if Cerebras is not None:
+        client = _get_cerebras_client(api_key)
+
+        for model in _candidate_cerebras_models(CEREBRAS_MODEL):
             try:
-                client = _get_cerebras_client(api_key)
                 chat_completion = client.chat.completions.create(
                     model=model,
                     temperature=0.2,
@@ -848,18 +853,24 @@ def generate_with_cerebras(
                     model,
                     exc,
                 )
-            else:
-                return (
-                    {
-                        "prediction": str(parsed.get("prediction", "")).strip(),
-                        "confidence": str(parsed.get("confidence", "")).strip().lower()
-                        or "medium",
-                        "summary": str(parsed.get("summary", "")).strip(),
-                    },
-                    "used",
-                    None,
-                )
+                continue
 
+            return (
+                _normalize_cerebras_response(
+                    parsed=parsed,
+                    heuristic_prediction=heuristic_prediction,
+                ),
+                "used",
+                None,
+            )
+
+        log.warning(
+            "Cerebras prediction fallback activated after SDK attempts: %s",
+            last_error,
+        )
+        return None, "failed", last_error
+
+    for model in _candidate_cerebras_models(CEREBRAS_MODEL):
         payload = {
             "model": model,
             "temperature": 0.2,
@@ -939,17 +950,18 @@ def generate_with_cerebras(
             continue
 
         return (
-            {
-                "prediction": str(parsed.get("prediction", "")).strip(),
-                "confidence": str(parsed.get("confidence", "")).strip().lower()
-                or "medium",
-                "summary": str(parsed.get("summary", "")).strip(),
-            },
+            _normalize_cerebras_response(
+                parsed=parsed,
+                heuristic_prediction=heuristic_prediction,
+            ),
             "used",
             None,
         )
 
-    log.warning("Cerebras prediction fallback activated after all attempts: %s", last_error)
+    log.warning(
+        "Cerebras prediction fallback activated after raw HTTP attempts: %s",
+        last_error,
+    )
     return None, "failed", last_error
 
 
@@ -1190,6 +1202,118 @@ def _load_json_object(content: str) -> dict[str, Any]:
         if not match:
             raise
         return json.loads(match.group(0))
+
+
+def _normalize_cerebras_response(
+    parsed: dict[str, Any],
+    heuristic_prediction: str,
+) -> dict[str, str]:
+    prediction = _normalize_cerebras_prediction(
+        parsed.get("prediction"),
+        fallback=heuristic_prediction,
+    )
+    confidence = _normalize_cerebras_confidence(parsed.get("confidence"))
+    summary = str(parsed.get("summary", "")).strip()
+
+    return {
+        "prediction": prediction,
+        "confidence": confidence,
+        "summary": summary,
+    }
+
+
+def _normalize_cerebras_prediction(value: Any, fallback: str) -> str:
+    if isinstance(value, dict):
+        normalized = _prediction_from_mapping(value)
+        if normalized:
+            return normalized
+
+    if value is None:
+        return fallback
+
+    text = str(value).strip()
+    if not text:
+        return fallback
+
+    if "rs" in text.lower() or "/ month" in text.lower() or "/month" in text.lower():
+        return text
+
+    embedded_mapping = _parse_prediction_mapping(text)
+    if embedded_mapping:
+        normalized = _prediction_from_mapping(embedded_mapping)
+        if normalized:
+            return normalized
+
+    numeric_value = _extract_numeric_prediction(text)
+    if numeric_value is not None:
+        return format_single_monthly(numeric_value)
+
+    return fallback
+
+
+def _normalize_cerebras_confidence(value: Any) -> str:
+    if isinstance(value, (int, float)) and not pd.isna(value):
+        return _confidence_band(float(value))
+
+    text = str(value or "").strip().lower()
+    if text in {"low", "medium", "high"}:
+        return text
+
+    try:
+        numeric_value = float(text)
+    except (TypeError, ValueError):
+        return "medium"
+
+    return _confidence_band(numeric_value)
+
+
+def _confidence_band(score: float) -> str:
+    if score >= 0.78:
+        return "high"
+    if score >= 0.45:
+        return "medium"
+    return "low"
+
+
+def _parse_prediction_mapping(value: str) -> dict[str, Any] | None:
+    candidate = value.strip()
+
+    if not candidate.startswith("{") or not candidate.endswith("}"):
+        return None
+
+    try:
+        parsed = ast.literal_eval(candidate)
+    except (ValueError, SyntaxError):
+        return None
+
+    if isinstance(parsed, dict):
+        return parsed
+
+    return None
+
+
+def _prediction_from_mapping(value: dict[str, Any]) -> str | None:
+    minimum = _coerce_positive_number(value.get("min"))
+    maximum = _coerce_positive_number(value.get("max"))
+    average = _coerce_positive_number(value.get("avg"))
+
+    if minimum is not None and maximum is not None:
+        return format_monthly_range(minimum, maximum)
+
+    if average is not None:
+        return format_single_monthly(average)
+
+    return None
+
+
+def _extract_numeric_prediction(value: str) -> float | None:
+    numbers = [
+        float(match.replace(",", ""))
+        for match in re.findall(r"\d[\d,]*\.?\d*", value)
+    ]
+    if not numbers:
+        return None
+    return numbers[0]
 
 
 @lru_cache(maxsize=1)

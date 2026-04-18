@@ -187,6 +187,15 @@
             </div>
 
             <div class="result-badges">
+                {% if result.cerebras_status == 'used' %}
+                    <span class="token positive">LLM: Cerebras</span>
+                {% elif result.cerebras_status == 'failed' %}
+                    <span class="token warm">LLM: Local fallback</span>
+                {% elif result.cerebras_status == 'not_configured' %}
+                    <span class="token soft">LLM: Not configured</span>
+                {% elif result.cerebras_status == 'not_applicable' %}
+                    <span class="token soft">LLM: Not applicable</span>
+                {% endif %}
                 <span class="token accent">Mode {{ 'Full-Time' if result.employment_mode == 'full_time' else 'Intern' }}</span>
                 <span class="token soft">Confidence {{ result.confidence|capitalize }}</span>
                 <span class="token warm">Method {{ result.method.replace('_', ' ')|title }}</span>
@@ -200,18 +209,22 @@
                 {% endfor %}
             </div>
 
+            <div class="callout-line">
+                {% if result.cerebras_status == 'used' %}
+                    <strong>LLM status:</strong> Cerebras refined the final salary answer for this run.
+                {% elif result.cerebras_status == 'failed' %}
+                    <strong>LLM status:</strong> Local retrieval and heuristics were used because Cerebras refinement failed for this run.
+                {% elif result.cerebras_status == 'not_configured' %}
+                    <strong>LLM status:</strong> Cerebras is not configured, so this result uses local retrieval and heuristics only.
+                {% elif result.cerebras_status == 'not_applicable' %}
+                    <strong>LLM status:</strong> Cerebras was skipped because there was not enough applicable salary evidence to refine this run.
+                {% else %}
+                    <strong>LLM status:</strong> Local retrieval and heuristics were used for this run.
+                {% endif %}
+            </div>
+
             {% if result.warning %}
                 <div class="alert alert-warning">{{ result.warning }}</div>
-            {% endif %}
-
-            {% if result.cerebras_status == 'used' or result.cerebras_status == 'failed' %}
-                <div class="hint">
-                    {% if result.cerebras_status == 'used' %}
-                        Cerebras refined the final answer after retrieval.
-                    {% elif result.cerebras_status == 'failed' %}
-                        This response used local retrieval and heuristics only because Cerebras refinement was unavailable for this run.
-                    {% endif %}
-                </div>
             {% endif %}
 
             {% if flask_debug and result.cerebras_status == 'failed' and result.cerebras_error %}

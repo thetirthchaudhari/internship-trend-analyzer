@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import hashlib
 from types import SimpleNamespace
 from datetime import datetime
 
@@ -25,6 +26,7 @@ if BASE_DIR not in sys.path:
 from settings import (
     APP_NAME,
     CATEGORY_LABELS,
+    CEREBRAS_API_KEY,
     FLASK_DEBUG,
     FLASK_SECRET_KEY,
     LINKEDIN_FIELD_OPTIONS,
@@ -35,6 +37,7 @@ from settings import (
     SITE_OWNER_NAME,
     SITE_OWNER_PHONE,
 )
+from logger import get_logger
 
 # Now these imports should work:
 from database.mongo_client import (
@@ -75,6 +78,22 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
+log = get_logger(__name__)
+
+
+def _key_fingerprint(value: str | None) -> str:
+    if not value:
+        return "missing"
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return f"{digest[:8]}...{digest[-8:]}"
+
+
+log.info(
+    "Cerebras configured: %s | key fingerprint: %s | key length: %s",
+    "yes" if CEREBRAS_API_KEY else "no",
+    _key_fingerprint(CEREBRAS_API_KEY),
+    len(CEREBRAS_API_KEY) if CEREBRAS_API_KEY else 0,
+)
 
 # ---------------------------------------------------------------------
 # Helpers
