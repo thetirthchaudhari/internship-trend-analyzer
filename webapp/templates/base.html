@@ -49,6 +49,9 @@
                     <a href="{{ url_for('search') }}" class="nav-link {% if request.endpoint == 'search' %}active{% endif %}">
                         <span class="nav-link-content">{{ ui_icon('search', 'nav-icon') }}<span>Skill Search</span></span>
                     </a>
+                    <a href="{{ url_for('role_fit') }}" class="nav-link {% if request.endpoint == 'role_fit' %}active{% endif %}">
+                        <span class="nav-link-content">{{ ui_icon('rank', 'nav-icon') }}<span>Role Fit</span></span>
+                    </a>
                     <a href="{{ url_for('prediction') }}" class="nav-link {% if request.endpoint == 'prediction' %}active{% endif %}">
                         <span class="nav-link-content">{{ ui_icon('prediction', 'nav-icon') }}<span>Salary Predictor</span></span>
                     </a>

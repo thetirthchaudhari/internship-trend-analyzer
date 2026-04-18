@@ -31,8 +31,8 @@
                 </article>
                 <article class="proof-card">
                     <div class="proof-label">{{ ui_icon('workflow', 'proof-icon') }} Product modules</div>
-                    <strong>5+</strong>
-                    <span>workflow lanes covering collection, matching, and prediction</span>
+                    <strong>6+</strong>
+                    <span>workflow lanes covering collection, matching, role fit, and prediction</span>
                 </article>
             </div>
         </div>
@@ -152,6 +152,83 @@
     <section class="section-block">
         <div class="section-heading">
             <div>
+                <div class="eyebrow">Rolewise charts</div>
+                <h2 class="section-title section-title-row">{{ ui_icon('rank', 'section-icon') }} Which role families are shaping the dataset</h2>
+                <p class="section-copy">
+                    This chart turns raw inventory into an immediate read on where the current market coverage is concentrated before you move deeper into the workflow.
+                </p>
+            </div>
+            <a href="{{ url_for('role_fit') }}" class="button button-ghost">Open role fit explorer</a>
+        </div>
+
+        {% if role_chart_items %}
+            <div class="role-chart-layout">
+                <article class="panel role-chart-card">
+                    <div class="panel-header role-chart-header">
+                        <div class="panel-kicker">{{ ui_icon('database', 'panel-inline-icon') }} Role distribution</div>
+                        <h3 class="panel-title">Current role-family mix</h3>
+                        <p class="panel-copy">Top families based on the live indexed dataset, weighted by how often they appear across collected roles.</p>
+                    </div>
+
+                    <div class="role-bar-list">
+                        {% for item in role_chart_items %}
+                            <div class="role-bar-item">
+                                <div class="role-bar-head">
+                                    <span>{{ item.label }}</span>
+                                    <strong>{{ item.count }}</strong>
+                                </div>
+                                <div class="role-bar-track" aria-hidden="true">
+                                    <span class="role-bar-fill" style="width: {{ item.fill_width }}%;"></span>
+                                </div>
+                                <div class="role-bar-meta">{{ item.share_display }} of indexed roles</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </article>
+
+                <article class="info-panel role-chart-summary-card">
+                    <div class="panel-kicker">{{ ui_icon('signal', 'panel-inline-icon') }} Market concentration</div>
+                    <h3 class="panel-title">The dataset is currently led by {{ role_chart_summary.dominant_label }}</h3>
+                    <p>
+                        {{ role_chart_summary.dominant_label }} accounts for {{ role_chart_summary.dominant_share }}
+                        of the current inventory, giving you a fast signal on which role family is most visible right now.
+                    </p>
+
+                    <div class="role-chart-spotlight">
+                        <div>
+                            <span class="signal-meta-label">Leading family</span>
+                            <strong>{{ role_chart_summary.dominant_label }}</strong>
+                        </div>
+                        <div>
+                            <span class="signal-meta-label">Indexed roles</span>
+                            <strong>{{ role_chart_summary.dominant_count }}</strong>
+                        </div>
+                        <div>
+                            <span class="signal-meta-label">Tracked families</span>
+                            <strong>{{ role_chart_summary.tracked_families }}</strong>
+                        </div>
+                        <div>
+                            <span class="signal-meta-label">Active sources</span>
+                            <strong>{{ role_chart_summary.active_sources }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="mini-action-row">
+                        <a href="{{ url_for('jobs') }}" class="button button-secondary">Inspect matching jobs</a>
+                    </div>
+                </article>
+            </div>
+        {% else %}
+            <div class="empty-panel">
+                <h3>No role distribution yet</h3>
+                <p>Run a scrape first and the dashboard will turn stored categories into a rolewise chart view here.</p>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="section-block">
+        <div class="section-heading">
+            <div>
                 <div class="eyebrow">Workflow lanes</div>
                 <h2 class="section-title section-title-row">{{ ui_icon('workflow', 'section-icon') }} Move from collection to interpretation</h2>
                 <p class="section-copy">
@@ -188,6 +265,16 @@
                 <div class="workflow-meta">Matching logic · Ranked results · Skill overlap evidence</div>
                 <div class="mini-action-row">
                     <a href="{{ url_for('search') }}" class="button button-secondary">Search by skills</a>
+                </div>
+            </article>
+
+            <article class="info-panel workflow-card">
+                <div class="panel-kicker">{{ ui_icon('rank', 'panel-inline-icon') }} Recommend</div>
+                <h3 class="panel-title">Role fit explorer</h3>
+                <p>Enter a skill stack and surface the role families that best fit it, plus salary signals tied to those role directions.</p>
+                <div class="workflow-meta">Role grouping · Fit scores · Salary evidence</div>
+                <div class="mini-action-row">
+                    <a href="{{ url_for('role_fit') }}" class="button button-secondary">Open role fit</a>
                 </div>
             </article>
 

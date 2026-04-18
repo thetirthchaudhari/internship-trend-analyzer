@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import hashlib
+from collections import Counter
 from types import SimpleNamespace
 from datetime import datetime
 
@@ -108,6 +109,31 @@ CONTACT_FORM_FIELDS = (
     "message",
 )
 
+ROLE_TITLE_STOPWORDS = {
+    "analyst",
+    "application",
+    "associate",
+    "consultant",
+    "developer",
+    "engineer",
+    "executive",
+    "fresher",
+    "graduate",
+    "intern",
+    "internship",
+    "junior",
+    "lead",
+    "manager",
+    "role",
+    "senior",
+    "software",
+    "specialist",
+    "staff",
+    "team",
+    "technical",
+    "trainee",
+}
+
 
 def _phone_href(phone_number: str) -> str:
     digits = "".join(ch for ch in phone_number if ch.isdigit())
@@ -201,10 +227,13 @@ def build_latest_jobs(df: pd.DataFrame, limit: int = 10):
 def build_dashboard_context() -> dict:
     stats, df = get_dashboard_data()
     by_category = stats.get("by_category", {}) or {}
+    role_chart_items = _build_role_chart_items(stats)
 
     return {
         "stats": stats,
         "top_categories": list(by_category.items())[:6],
+        "role_chart_items": role_chart_items,
+        "role_chart_summary": _build_role_chart_summary(stats, role_chart_items),
         "latest_jobs": build_latest_jobs(df, limit=10),
         "CATEGORY_LABELS": CATEGORY_LABELS,
     }
@@ -220,6 +249,333 @@ def build_scrape_context() -> dict:
         "linkedin_field_options": LINKEDIN_FIELD_OPTIONS,
         "naukri_field_options": NAUKRI_FIELD_OPTIONS,
     }
+
+
+def _format_role_label(role_key: str) -> str:
+    role_key = (role_key or "").strip()
+    if not role_key:
+        return "General Tech"
+    return CATEGORY_LABELS.get(role_key, role_key)
+
+
+def _build_role_chart_items(stats: dict, limit: int = 6) -> list[dict]:
+    by_category = stats.get("by_category", {}) or {}
+    total_jobs = max(int(stats.get("total_jobs") or 0), 1)
+    items: list[dict] = []
+
+    sorted_items = sorted(
+        by_category.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:limit]
+
+    for role_key, count in sorted_items:
+        share = (int(count) / total_jobs) * 100
+        items.append(
+            {
+                "key": role_key,
+                "label": _format_role_label(role_key),
+                "count": int(count),
+                "share": share,
+                "share_display": f"{share:.1f}%",
+                "fill_width": min(max(share, 10.0), 100.0),
+            }
+        )
+
+    return items
+
+
+def _build_role_chart_summary(stats: dict, role_chart_items: list[dict]) -> dict:
+    if not role_chart_items:
+        return {}
+
+    dominant = role_chart_items[0]
+    return {
+        "dominant_label": dominant["label"],
+        "dominant_share": dominant["share_display"],
+        "dominant_count": dominant["count"],
+        "tracked_families": len(stats.get("by_category", {}) or {}),
+        "active_sources": len(stats.get("by_source", {}) or {}),
+    }
+
+
+def _split_skills_input(skills_input: str) -> list[str]:
+    return [value.strip() for value in skills_input.split(",") if value.strip()]
+
+
+def _ordered_unique_strings(values, limit: int = 3) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    for raw_value in values:
+        if pd.isna(raw_value):
+            continue
+
+        value = str(raw_value).strip()
+        if not value or value.lower() == "nan" or value in seen:
+            continue
+
+        ordered.append(value)
+        seen.add(value)
+
+        if len(ordered) >= limit:
+            break
+
+    return ordered
+
+
+def _top_ranked_matched_skills(skill_values, limit: int = 6) -> list[str]:
+    skill_counts: Counter[str] = Counter()
+
+    for raw_value in skill_values:
+        if pd.isna(raw_value):
+            continue
+
+        for skill in str(raw_value).split(","):
+            cleaned = skill.strip()
+            if not cleaned:
+                continue
+            skill_counts[cleaned] += 1
+
+    return [skill for skill, _count in skill_counts.most_common(limit)]
+
+
+def _resolve_role_group_key(row: pd.Series) -> str:
+    role_category = str(row.get("role_category") or "").strip()
+    if role_category:
+        return role_category
+
+    title = str(row.get("title") or "").strip()
+    return title or "General Tech"
+
+
+def _extract_title_tokens(titles: list[str], limit: int = 5) -> list[str]:
+    tokens: list[str] = []
+
+    for title in titles:
+        normalized = re.sub(r"[^a-z0-9+#/ ]+", " ", str(title).lower())
+        for token in normalized.split():
+            if len(token) < 4 or token in ROLE_TITLE_STOPWORDS or token in tokens:
+                continue
+            tokens.append(token)
+            if len(tokens) >= limit:
+                return tokens
+
+    return tokens
+
+
+def _load_role_salary_frame() -> pd.DataFrame:
+    if salary_predictor is None:
+        return pd.DataFrame()
+
+    try:
+        salary_jobs = salary_predictor.load_salary_jobs()
+        if salary_jobs.empty:
+            return pd.DataFrame()
+        return salary_predictor.build_salary_corpus(salary_jobs)
+    except Exception as exc:
+        log.warning("Role-fit salary corpus unavailable: %s", exc)
+        return pd.DataFrame()
+
+
+def _format_salary_range(low: float | None, high: float | None) -> str:
+    if low is None or high is None or pd.isna(low) or pd.isna(high):
+        return "Salary signal unavailable"
+
+    if salary_predictor is not None and hasattr(salary_predictor, "format_monthly_range"):
+        return salary_predictor.format_monthly_range(float(low), float(high))
+
+    low_value = int(round(float(low) / 500.0) * 500)
+    high_value = int(round(float(high) / 500.0) * 500)
+
+    if abs(high_value - low_value) < 1000:
+        return f"Rs {low_value:,} / month"
+
+    return f"Rs {low_value:,} - Rs {high_value:,} / month"
+
+
+def _estimate_role_salary_signal(
+    role_key: str,
+    sample_titles: list[str],
+    salary_df: pd.DataFrame,
+    prefer_internship: bool,
+) -> dict:
+    if salary_df.empty:
+        return {
+            "display": "Salary signal unavailable",
+            "sample_size": 0,
+            "note": "Add salary-bearing rows or use the salary predictor for a deeper estimate.",
+        }
+
+    candidates = salary_df.copy()
+
+    if prefer_internship and "is_internship_like" in candidates.columns:
+        internship_slice = candidates[candidates["is_internship_like"].fillna(False)].copy()
+        if len(internship_slice) >= 8:
+            candidates = internship_slice
+
+    role_key_normalized = (role_key or "").strip().casefold()
+    matched_frames: list[pd.DataFrame] = []
+
+    if role_key_normalized and "role_category" in candidates.columns:
+        category_match = candidates[
+            candidates["role_category"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.casefold()
+            .eq(role_key_normalized)
+        ].copy()
+        if not category_match.empty:
+            matched_frames.append(category_match)
+
+    title_tokens = _extract_title_tokens(sample_titles)
+    if title_tokens and "title" in candidates.columns:
+        title_series = candidates["title"].fillna("").astype(str).str.lower()
+        token_mask = pd.Series(False, index=candidates.index)
+        for token in title_tokens:
+            token_mask = token_mask | title_series.str.contains(
+                re.escape(token),
+                regex=True,
+                na=False,
+            )
+        title_match = candidates[token_mask].copy()
+        if not title_match.empty:
+            matched_frames.append(title_match)
+
+    if matched_frames:
+        matched = (
+            pd.concat(matched_frames, ignore_index=True, sort=False)
+            .drop_duplicates(subset=["title", "company", "location", "salary_value"])
+            .reset_index(drop=True)
+        )
+    else:
+        matched = pd.DataFrame()
+
+    if matched.empty:
+        return {
+            "display": "Salary signal unavailable",
+            "sample_size": 0,
+            "note": "No close salary evidence was found for this role family yet.",
+        }
+
+    midpoint = pd.to_numeric(matched.get("salary_monthly_mid"), errors="coerce")
+    midpoint = midpoint.dropna()
+
+    if midpoint.empty:
+        mins = pd.to_numeric(matched.get("salary_monthly_min"), errors="coerce")
+        maxes = pd.to_numeric(matched.get("salary_monthly_max"), errors="coerce")
+        midpoint = ((mins + maxes) / 2.0).dropna()
+
+    if midpoint.empty:
+        return {
+            "display": "Salary signal unavailable",
+            "sample_size": int(len(matched)),
+            "note": "Salary rows exist, but they are not numeric enough to summarize here.",
+        }
+
+    low = float(midpoint.quantile(0.25))
+    high = float(midpoint.quantile(0.75))
+    if high < low:
+        low, high = high, low
+
+    scope = "internship-leaning" if prefer_internship else "mixed-market"
+    return {
+        "display": _format_salary_range(low, high),
+        "sample_size": int(len(matched)),
+        "note": f"Built from {len(matched)} {scope} salary records tied to the same role context.",
+    }
+
+
+def build_role_fit_context(skills: list[str], limit: int = 8) -> tuple[list[dict], dict]:
+    if skill_analyzer is None:
+        return [], {}
+
+    collection = get_collection()
+    df = load_jobs_to_dataframe(collection)
+    results_df = skill_analyzer.search_jobs_by_skills(df, skills)
+
+    if results_df.empty:
+        return [], {
+            "searched_skills": skills,
+            "matched_jobs": 0,
+            "salary_supported_roles": 0,
+        }
+
+    results_df = results_df.copy()
+    results_df["role_group_key"] = results_df.apply(_resolve_role_group_key, axis=1)
+    salary_df = _load_role_salary_frame()
+
+    recommendations: list[dict] = []
+
+    for role_key, group in results_df.groupby("role_group_key", dropna=False):
+        group = group.sort_values(
+            by=["final_score", "match_score", "title"],
+            ascending=[False, False, True],
+        )
+
+        top_titles = _ordered_unique_strings(group.get("title", []), limit=3)
+        top_locations = _ordered_unique_strings(group.get("location", []), limit=3)
+        top_companies = _ordered_unique_strings(group.get("company", []), limit=3)
+        matched_skills = _top_ranked_matched_skills(group.get("matched_skills", []), limit=6)
+
+        internship_signal = (
+            group.get("employment_status", pd.Series("", index=group.index))
+            .fillna("")
+            .astype(str)
+            .str.contains("intern|trainee", case=False, na=False)
+        )
+        title_signal = (
+            group.get("title", pd.Series("", index=group.index))
+            .fillna("")
+            .astype(str)
+            .str.contains("intern|trainee", case=False, na=False)
+        )
+        prefer_internship = bool((internship_signal | title_signal).mean() >= 0.5)
+        fit_score = float(group["final_score"].head(min(3, len(group))).mean())
+        salary_signal = _estimate_role_salary_signal(
+            role_key=role_key,
+            sample_titles=top_titles,
+            salary_df=salary_df,
+            prefer_internship=prefer_internship,
+        )
+
+        recommendations.append(
+            {
+                "role_key": role_key,
+                "role_label": _format_role_label(str(role_key)),
+                "fit_score": fit_score,
+                "fit_score_display": f"{round(fit_score * 100)}%",
+                "matching_jobs": int(len(group)),
+                "top_titles": top_titles,
+                "top_locations": top_locations,
+                "top_companies": top_companies,
+                "matched_skills": matched_skills,
+                "salary_display": salary_signal["display"],
+                "salary_note": salary_signal["note"],
+                "salary_sample_size": salary_signal["sample_size"],
+                "employment_hint": "Internship-leaning" if prefer_internship else "Mixed market",
+                "top_overlap": int(group["match_score"].max()) if "match_score" in group else 0,
+            }
+        )
+
+    recommendations.sort(
+        key=lambda item: (item["fit_score"], item["matching_jobs"], item["salary_sample_size"]),
+        reverse=True,
+    )
+    recommendations = recommendations[:limit]
+
+    salary_supported_roles = sum(1 for item in recommendations if item["salary_sample_size"] > 0)
+    summary = {
+        "searched_skills": skills,
+        "matched_jobs": int(len(results_df)),
+        "recommended_roles": len(recommendations),
+        "salary_supported_roles": salary_supported_roles,
+    }
+    if recommendations:
+        summary["top_role_label"] = recommendations[0]["role_label"]
+
+    return recommendations, summary
 
 
 def _blank_contact_form() -> dict[str, str]:
@@ -505,6 +861,38 @@ def search():
         "search.html",
         skills_input=skills_input,
         results=results,
+        message=message,
+    )
+
+
+@app.route("/role-fit", methods=["GET", "POST"])
+def role_fit():
+    skills_input = ""
+    searched_skills: list[str] = []
+    recommendations: list[dict] = []
+    summary: dict = {}
+    message = None
+
+    if request.method == "POST":
+        skills_input = (request.form.get("skills") or "").strip()
+
+        if not skills_input:
+            message = "Please enter at least one skill."
+        elif skill_analyzer is None:
+            message = "Role-fit search is not configured yet."
+        else:
+            searched_skills = _split_skills_input(skills_input)
+            recommendations, summary = build_role_fit_context(searched_skills)
+
+            if not recommendations:
+                message = "No role families matched those skills yet."
+
+    return render_template(
+        "role_fit.html",
+        skills_input=skills_input,
+        searched_skills=searched_skills,
+        recommendations=recommendations,
+        summary=summary,
         message=message,
     )
 

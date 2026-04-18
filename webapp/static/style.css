@@ -793,6 +793,202 @@ textarea {
   font-size: 0.94rem;
 }
 
+.role-chart-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  gap: 16px;
+}
+
+.role-chart-card,
+.role-chart-summary-card {
+  padding: 18px;
+}
+
+.role-chart-header {
+  margin-bottom: 0;
+}
+
+.role-bar-list {
+  display: grid;
+  gap: 14px;
+}
+
+.role-bar-item {
+  display: grid;
+  gap: 7px;
+}
+
+.role-bar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  color: var(--ink-main);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.role-bar-head strong {
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  letter-spacing: -0.04em;
+}
+
+.role-bar-track {
+  position: relative;
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(31, 111, 100, 0.08);
+}
+
+.role-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #6bb5a7);
+  box-shadow: 0 8px 18px rgba(47, 122, 109, 0.14);
+}
+
+.role-bar-meta {
+  color: var(--ink-soft);
+  font-size: 0.83rem;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.role-chart-summary-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: var(--shadow-md);
+}
+
+.role-chart-spotlight {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(31, 111, 100, 0.08);
+  border-radius: 18px;
+  background: rgba(230, 243, 240, 0.52);
+}
+
+.role-chart-spotlight strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: -0.04em;
+}
+
+.role-fit-summary,
+.role-fit-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.role-fit-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.role-fit-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.role-fit-summary-card {
+  min-height: 100%;
+}
+
+.role-fit-card {
+  padding: 18px;
+}
+
+.role-fit-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.role-fit-heading {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.role-fit-subtle {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+.role-fit-salary {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(31, 111, 100, 0.08);
+  border-radius: 16px;
+  background: rgba(230, 243, 240, 0.64);
+}
+
+.role-fit-salary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-strong);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.role-fit-salary strong {
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+}
+
+.role-fit-salary span:last-child {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+.role-fit-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.role-fit-detail {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(29, 39, 48, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.role-fit-detail p {
+  margin: 0;
+  color: var(--ink-main);
+  font-size: 0.9rem;
+  line-height: 1.56;
+  letter-spacing: -0.01em;
+}
+
+.role-fit-detail-wide {
+  grid-column: 1 / -1;
+}
+
 .workflow-card {
   min-height: 100%;
 }
@@ -1896,6 +2092,9 @@ input[type="range"]:focus {
   .proof-grid,
   .insight-strip,
   .workflow-grid,
+  .role-fit-summary,
+  .role-fit-grid,
+  .role-chart-layout,
   .split-header,
   .hero-panel {
     grid-template-columns: 1fr;
@@ -1961,6 +2160,7 @@ input[type="range"]:focus {
   .job-card-top,
   .example-card-top,
   .latest-card-top,
+  .role-fit-top,
   .section-heading,
   .pagination-bar {
     flex-direction: column;
@@ -1974,6 +2174,11 @@ input[type="range"]:focus {
 
   .score-panel {
     text-align: left;
+  }
+
+  .role-fit-detail-grid,
+  .role-chart-spotlight {
+    grid-template-columns: 1fr;
   }
 }
 

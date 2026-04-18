@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "_ui_macros.html" import ui_icon %}
+{% block title %}Role Fit · Internship Trend Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-stack">
+    <section class="page-header split-header">
+        <div>
+            <div class="eyebrow">Role-fit intelligence</div>
+            <h1 class="page-title">Turn your skills into role directions with salary context.</h1>
+            <p class="page-lead">
+                Enter your stack once and surface the role families most aligned to it, along with approximate monthly salary signals pulled from the project’s evidence layers.
+            </p>
+            <div class="mini-action-row">
+                <a href="{{ url_for('search') }}" class="button button-primary">Open skill-level search</a>
+                <a href="{{ url_for('prediction') }}" class="button button-secondary">Use salary predictor</a>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="panel-kicker">{{ ui_icon('rank', 'panel-inline-icon') }} How this module works</div>
+            <p>
+                Matching starts with the existing skill-search ranker, then groups the strongest job evidence into role families and attaches salary signals where role-linked salary data exists.
+            </p>
+            <div class="token-row">
+                <span class="token accent">Role grouping</span>
+                <span class="token soft">Fit scoring</span>
+                <span class="token warm">Salary evidence</span>
+            </div>
+        </div>
+    </section>
+
+    {% if message %}
+        <div class="alert alert-warning">{{ message }}</div>
+    {% endif %}
+
+    <section class="panel">
+        <div class="panel-header">
+            <div class="panel-kicker">{{ ui_icon('search', 'panel-inline-icon') }} Input your stack</div>
+            <h2 class="panel-title">Describe the skills you want the system to map</h2>
+            <p class="panel-copy">
+                Use comma-separated skills like Python, SQL, React, FastAPI, NLP, TensorFlow, backend, analytics, or cloud to surface the strongest role directions in the live dataset.
+            </p>
+        </div>
+
+        <form method="post" class="form-grid search-form-layout">
+            <div class="field-stack grow-field">
+                <label for="skills">Skills</label>
+                <input
+                    id="skills"
+                    type="text"
+                    name="skills"
+                    placeholder="python, sql, machine learning, fastapi"
+                    value="{{ skills_input }}"
+                >
+            </div>
+            <div class="field-stack field-action">
+                <label>&nbsp;</label>
+                <button type="submit" class="button button-primary full-width">Find best-fit roles</button>
+            </div>
+        </form>
+
+        <div class="insight-strip">
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('jobs', 'insight-icon') }} Role direction</div>
+                <p>The output stays role-centric, so you can move from skill list to plausible career lanes instead of only viewing raw job cards.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('salary', 'insight-icon') }} Approx salary</div>
+                <p>Salary ranges are summarized from role-linked evidence when available, keeping the page practical instead of purely classificatory.</p>
+            </article>
+            <article class="insight-card">
+                <div class="insight-label">{{ ui_icon('evidence', 'insight-icon') }} Explainable output</div>
+                <p>Matched skills, sample titles, and hiring contexts make the recommendation surface readable during demos and evaluations.</p>
+            </article>
+        </div>
+    </section>
+
+    {% if recommendations %}
+        <section class="section-block">
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">Role recommendations</div>
+                    <h2 class="section-title section-title-row">{{ ui_icon('rank', 'section-icon') }} Best role families for this skill stack</h2>
+                    <p class="section-copy">
+                        {{ summary.recommended_roles }} role families surfaced from {{ summary.matched_jobs }} matching jobs{% if summary.top_role_label %}, with {{ summary.top_role_label }} leading the fit ranking{% endif %}.
+                    </p>
+                </div>
+            </div>
+
+            <div class="role-fit-summary">
+                <article class="metric-card role-fit-summary-card">
+                    <div class="metric-label">{{ ui_icon('search', 'metric-icon') }} Skills entered</div>
+                    <div class="token-row">
+                        {% for skill in searched_skills %}
+                            <span class="token accent">{{ skill }}</span>
+                        {% endfor %}
+                    </div>
+                </article>
+
+                <article class="metric-card role-fit-summary-card">
+                    <div class="metric-label">{{ ui_icon('jobs', 'metric-icon') }} Matching jobs</div>
+                    <div class="metric-value">{{ summary.matched_jobs }}</div>
+                    <div class="metric-note">Stored roles contributing to the recommendation layer for this exact skill set.</div>
+                </article>
+
+                <article class="metric-card role-fit-summary-card">
+                    <div class="metric-label">{{ ui_icon('salary', 'metric-icon') }} Salary-backed roles</div>
+                    <div class="metric-value">{{ summary.salary_supported_roles }}</div>
+                    <div class="metric-note">Recommended role families that also have enough salary evidence to summarize a monthly range.</div>
+                </article>
+            </div>
+
+            <div class="role-fit-grid">
+                {% for item in recommendations %}
+                    <article class="job-card role-fit-card">
+                        <div class="role-fit-top">
+                            <div class="role-fit-heading">
+                                <div class="panel-kicker">{{ ui_icon('rank', 'panel-inline-icon') }} Best-fit role family</div>
+                                <h3 class="panel-title">{{ item.role_label }}</h3>
+                                <p class="role-fit-subtle">{{ item.matching_jobs }} matching jobs · {{ item.employment_hint }} · top overlap {{ item.top_overlap }}</p>
+                            </div>
+
+                            <div class="score-panel compact">
+                                <div class="score-label">Role fit</div>
+                                <div class="score-value">{{ item.fit_score_display }}</div>
+                            </div>
+                        </div>
+
+                        <div class="role-fit-salary">
+                            <span class="role-fit-salary-label">{{ ui_icon('salary', 'meta-inline-icon') }} Approx monthly salary</span>
+                            <strong>{{ item.salary_display }}</strong>
+                            <span>{{ item.salary_note }}</span>
+                        </div>
+
+                        {% if item.matched_skills %}
+                            <div class="token-row">
+                                {% for skill in item.matched_skills %}
+                                    <span class="token accent">{{ skill }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="role-fit-detail-grid">
+                            <div class="role-fit-detail">
+                                <span class="signal-meta-label">{{ ui_icon('jobs', 'meta-inline-icon') }} Example titles</span>
+                                <p>{{ item.top_titles|join(" · ") if item.top_titles else "No title evidence yet" }}</p>
+                            </div>
+                            <div class="role-fit-detail">
+                                <span class="signal-meta-label">{{ ui_icon('source', 'meta-inline-icon') }} Hiring contexts</span>
+                                <p>{{ item.top_locations|join(" · ") if item.top_locations else "Location evidence still building" }}</p>
+                            </div>
+                            <div class="role-fit-detail role-fit-detail-wide">
+                                <span class="signal-meta-label">{{ ui_icon('database', 'meta-inline-icon') }} Example companies</span>
+                                <p>{{ item.top_companies|join(" · ") if item.top_companies else "Company evidence still building" }}</p>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        </section>
+    {% elif skills_input %}
+        <div class="empty-panel">
+            <h3>No role families matched those skills yet</h3>
+            <p>Try broader skill terms, combine technical and domain keywords, or scrape more listings to widen the evidence base.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
