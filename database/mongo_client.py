@@ -33,6 +33,11 @@ from settings import (
     SOURCE_NAME,
 )
 
+try:
+    from rag.salary_predictor import assign_role_category as infer_role_category
+except ImportError:
+    infer_role_category = None
+
 log = get_logger(__name__)
 DATABASE_NAME = MONGO_DATABASE_NAME
 COLLECTION_NAME = MONGO_COLLECTION_NAME
@@ -47,6 +52,8 @@ OPTIONAL_JOB_FIELDS = (
     "salary",
     "duration",
 )
+
+WEAK_ROLE_CATEGORIES = {"", "general_tech", "uncategorized", "unknown"}
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +298,40 @@ def load_jobs_to_dataframe(collection, query: dict = None) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame(docs)
+    df = _backfill_role_categories(df)
     log.info("Loaded %d jobs from MongoDB into DataFrame", len(df))
+    return df
+
+
+def _backfill_role_categories(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Recover weak / missing role categories at read time so downstream features
+    such as dashboard charts and role-fit recommendations stay useful even when
+    older documents were inserted before category tagging improved.
+    """
+    if df.empty or infer_role_category is None:
+        return df
+
+    if "role_category" not in df.columns:
+        df = df.copy()
+        df["role_category"] = ""
+    else:
+        df = df.copy()
+
+    role_series = df["role_category"].fillna("").astype(str).str.strip().str.casefold()
+    weak_mask = role_series.isin(WEAK_ROLE_CATEGORIES)
+    if not weak_mask.any():
+        return df
+
+    weak_df = df.loc[weak_mask]
+    df.loc[weak_mask, "role_category"] = [
+        infer_role_category(
+            row.get("title", ""),
+            row.get("search_query", ""),
+            row.get("description", ""),
+        )
+        for _, row in weak_df.iterrows()
+    ]
     return df
 
 

@@ -906,6 +906,7 @@ def prediction():
     location_input = ""
     description_input = ""
     employment_mode = "intern"
+    salary_examples_mode = "custom"
     salary_examples_count = 5
     selected_status_filters = _default_prediction_statuses(employment_mode)
     selected_scraped_categories = _default_prediction_industries()
@@ -919,10 +920,13 @@ def prediction():
         employment_mode = (
             "full_time" if request.form.get("full_time_mode") else "intern"
         )
-        salary_examples_count = max(
-            3,
-            min(10, int(request.form.get("salary_examples_count") or 5)),
+        salary_examples_mode = (
+            "all" if request.form.get("salary_examples_mode") == "all" else "custom"
         )
+        try:
+            salary_examples_count = max(1, int(request.form.get("salary_examples_count") or 5))
+        except (TypeError, ValueError):
+            salary_examples_count = 5
         selected_status_filters = (
             _get_selected_values(request.form, "salary_statuses")
             or _default_prediction_statuses(employment_mode)
@@ -945,7 +949,7 @@ def prediction():
                     employment_mode=employment_mode,
                     allowed_employment_statuses=selected_status_filters,
                     allowed_scraped_categories=selected_scraped_categories,
-                    top_k_salary=salary_examples_count,
+                    top_k_salary=None if salary_examples_mode == "all" else salary_examples_count,
                 )
             except Exception as exc:
                 message = f"Prediction failed: {exc}"
@@ -956,6 +960,7 @@ def prediction():
         location_input=location_input,
         description_input=description_input,
         employment_mode=employment_mode,
+        salary_examples_mode=salary_examples_mode,
         salary_examples_count=salary_examples_count,
         prediction_status_options=PREDICTION_STATUS_OPTIONS,
         selected_status_filters=selected_status_filters,

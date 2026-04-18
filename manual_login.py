@@ -26,8 +26,9 @@ options = uc.ChromeOptions()
 options.add_argument(f"--user-data-dir={PROFILE_DIR}")
 options.add_argument("--window-size=1280,900")
 
-# Open in headed mode so you can type your credentials
-driver = uc.Chrome(options=options, use_subprocess=True, version_main=145)
+# Open in headed mode so you can type your credentials. Let UC auto-detect
+# the installed Chrome version instead of pinning an old major version.
+driver = uc.Chrome(options=options, use_subprocess=True)
 
 # Go to LinkedIn login page
 driver.get("https://www.linkedin.com/login")

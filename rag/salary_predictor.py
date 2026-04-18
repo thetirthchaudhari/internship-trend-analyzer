@@ -29,14 +29,26 @@ try:
 except ImportError:
     Cerebras = None
 
+try:
+    from analysis.skill_analyzer import normalize_skill_text
+except ImportError:
+    def normalize_skill_text(text: str) -> str:
+        text = str(text).lower()
+        text = re.sub(r"[^\w\s]", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
 from logger import get_logger
 from settings import (
+    AI_JOBS_MARKET_DATA_PATH,
     CATEGORY_LABELS,
     CEREBRAS_API_KEY,
     CEREBRAS_MODEL,
+    INDIA_TECH_JOBS_DATA_PATH,
     KAGGLE_SALARY_DATA_PATH,
     PREDICTION_STATUS_OPTIONS,
     SCRAPED_DATA_PATHS,
+    USD_TO_INR_EXCHANGE_RATE,
 )
 
 log = get_logger(__name__)
@@ -60,7 +72,8 @@ SALARY_TEXT_FIELDS = (
     "description_hint",
 )
 
-INTERNSHIP_MARKERS = ("intern", "internship", "trainee")
+INTERNSHIP_PATTERN = re.compile(r"\bintern(?:ship)?\b|\btrainee\b", re.IGNORECASE)
+INDIA_TECH_MONTHLY_MAX_THRESHOLD = 100_000.0
 KNOWN_EMPLOYMENT_STATUSES = tuple(
     value for value, _label in PREDICTION_STATUS_OPTIONS
 )
@@ -72,6 +85,94 @@ UNPAID_MARKERS = (
     "volunteer",
 )
 
+SKILL_CATEGORY_PATTERNS: dict[str, tuple[str, ...]] = {
+    "ai_ml": (
+        "machine learning", "deep learning", "neural network", "pytorch",
+        "tensorflow", "scikit-learn", "sklearn", "nlp", "natural language",
+        "computer vision", "opencv", "llm", "transformer", "generative ai",
+        "hugging face", "keras", "reinforcement learning", "prompt engineering",
+        "prompt engineer", "fine tuning", "autogen", "langchain", "vector db",
+        "rag", "agentic",
+    ),
+    "data": (
+        "data science", "data engineer", "data analyst", "etl", "pandas",
+        "numpy", "pyspark", "spark", "hadoop", "airflow", "snowflake",
+        "redshift", "bigquery", "dbt", "data warehouse", "data pipeline",
+    ),
+    "backend": (
+        "django", "flask", "fastapi", "spring boot", "node.js", "nodejs",
+        "express.js", "rest api", "graphql", "microservices", "kafka",
+        "rabbitmq", "grpc",
+    ),
+    "frontend": (
+        "react", "vue", "angular", "next.js", "nextjs", "redux", "tailwind",
+        "typescript", "webpack", "vite",
+    ),
+    "fullstack": (
+        "full stack", "full-stack", "mern", "mean", "fullstack",
+    ),
+    "cloud_devops": (
+        "devops", "kubernetes", "docker", "terraform", "ansible", "jenkins",
+        "ci/cd", "sre", "site reliability", "prometheus", "grafana", "helm",
+    ),
+    "mlops": (
+        "mlops", "mlflow", "kubeflow", "model serving", "model deployment",
+        "feature store", "feature stores", "sagemaker", "vertex ai", "ml operations",
+    ),
+    "mobile": (
+        "android", "kotlin", "swift", "ios developer", "flutter",
+        "react native", "jetpack compose", "swiftui",
+    ),
+    "security": (
+        "cybersecurity", "penetration testing", "infosec", "siem", "owasp",
+        "burp suite", "vulnerability",
+    ),
+    "qa": (
+        "selenium", "cypress", "playwright", "test automation",
+        "pytest automation", "sdet", "junit", "qa engineer",
+    ),
+    "analytics": (
+        "tableau", "power bi", "powerbi", "looker", "business intelligence",
+        "bi analyst", "reporting analyst",
+    ),
+}
+
+CATEGORY_ROLE_PATTERNS: dict[str, str] = {
+    "ai_ml": r"machine learning|\bml\b|deep learning|\bnlp\b|\bai\b|artificial intelligence|computer vision|data scien|ai engineering|llm|prompt engineer|ai agent|generative ai",
+    "data": r"\bdata (analyst|engineer|scientist|analysis)|\betl\b|data warehouse|data pipeline|data engineering",
+    "backend": r"backend|back.?end|\bapi\b|python developer|java developer|node\.?js|django|flask|fastapi|spring",
+    "frontend": r"frontend|front.?end|\breact\b|angular|\bvue\b|\bui\b (developer|engineer)|web developer",
+    "fullstack": r"full.?stack|\bmern\b|\bmean\b",
+    "software": r"software (engineer|developer)|\bswe\b|\bsde\b",
+    "cloud_devops": r"devops|\bsre\b|site reliability|cloud (engineer|architect)|kubernetes|platform engineer|infrastructure|platform",
+    "mlops": r"mlops|ml operations|ml platform|ml infra|machine learning platform|machine learning infra",
+    "mobile": r"android|\bios\b|mobile (developer|engineer)|flutter|react native",
+    "security": r"cyber ?security|security (engineer|analyst|architect)|information security|infosec|penetration",
+    "qa": r"\bqa\b|\bsdet\b|test automation|quality (engineer|analyst)|software tester|\btesting\b",
+    "analytics": r"analytics (engineer|analyst)|business intelligence|\bbi\b (analyst|developer)|reporting analyst|tableau|power ?bi|business analyst|governance",
+    "research": r"research (engineer|intern|scientist)|applied scientist",
+}
+
+CATEGORY_ASSIGNMENT_PRIORITY: tuple[str, ...] = (
+    "mlops",
+    "ai_ml",
+    "analytics",
+    "data",
+    "security",
+    "cloud_devops",
+    "mobile",
+    "frontend",
+    "fullstack",
+    "backend",
+    "qa",
+    "research",
+    "software",
+)
+
+VALID_KAGGLE_EMPLOYMENT_STATUSES: frozenset[str] = frozenset(
+    {"full time", "intern", "contractor", "trainee"}
+)
+
 
 def predict_salary(
     job_description: str,
@@ -80,7 +181,7 @@ def predict_salary(
     employment_mode: str = "intern",
     allowed_employment_statuses: list[str] | None = None,
     allowed_scraped_categories: list[str] | None = None,
-    top_k_salary: int = 5,
+    top_k_salary: int | None = 5,
     top_k_descriptions: int = 3,
 ) -> dict[str, Any]:
     """
@@ -130,6 +231,9 @@ def predict_salary(
         employment_mode=employment_mode,
         query_text=base_query,
     )
+    inferred_category = infer_category_from_skills(
+        _join_text_parts(job_title, job_description)
+    )
     salary_examples = retrieve_salary_examples(
         salary_df=salary_df,
         query_text=enriched_query,
@@ -138,6 +242,7 @@ def predict_salary(
         allowed_employment_statuses=selected_statuses,
         job_title=job_title,
         job_location=job_location,
+        inferred_category=inferred_category,
     )
 
     heuristic = build_heuristic_prediction(
@@ -241,14 +346,22 @@ def load_scraped_jobs() -> pd.DataFrame:
 @lru_cache(maxsize=1)
 def load_salary_jobs() -> pd.DataFrame:
     """
-    Load salary-bearing rows from the Kaggle dataset and supplement them with
-    any local salary rows from the scraper outputs.
+    Load salary-bearing rows from the bundled salary datasets and supplement
+    them with any local salary rows from the scraper outputs.
     """
     frames: list[pd.DataFrame] = []
 
     kaggle_df = load_kaggle_salary_dataset()
     if not kaggle_df.empty:
         frames.append(kaggle_df)
+
+    ai_market_df = load_ai_jobs_market_dataset()
+    if not ai_market_df.empty:
+        frames.append(ai_market_df)
+
+    india_tech_df = load_india_tech_jobs_dataset()
+    if not india_tech_df.empty:
+        frames.append(india_tech_df)
 
     local_salary_df = load_local_salary_rows()
     if not local_salary_df.empty:
@@ -269,16 +382,32 @@ def load_kaggle_salary_dataset() -> pd.DataFrame:
     if raw_df.empty:
         return pd.DataFrame()
 
+    raw_employment = (
+        _series_from_df(raw_df, "Employment Status").astype(str).str.strip()
+    )
+    valid_employment_mask = raw_employment.str.lower().isin(
+        VALID_KAGGLE_EMPLOYMENT_STATUSES
+    )
+    raw_df = raw_df[valid_employment_mask].reset_index(drop=True)
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    title_series = _series_from_df(raw_df, "Job Title").astype(str).str.strip()
+    roles_series = _series_from_df(raw_df, "Job Roles").astype(str).str.strip()
+
     df = pd.DataFrame(
         {
-            "title": _series_from_df(raw_df, "Job Title").astype(str).str.strip(),
+            "title": title_series,
             "company": _series_from_df(raw_df, "Company Name").astype(str).str.strip(),
             "location": _series_from_df(raw_df, "Location").astype(str).str.strip(),
-            "role_category": _series_from_df(raw_df, "Job Roles").astype(str).str.strip(),
+            "role_category": [
+                assign_kaggle_category(title, roles)
+                for title, roles in zip(title_series, roles_series)
+            ],
             "employment_status": _series_from_df(raw_df, "Employment Status").astype(str).str.strip(),
             "source": "kaggle_salary_dataset",
             "job_url": "",
-            "search_query": "",
+            "search_query": roles_series,
             "description": "",
             "duration": "",
             "salary_report_count": pd.to_numeric(
@@ -312,6 +441,235 @@ def load_kaggle_salary_dataset() -> pd.DataFrame:
     )
 
     return df.reset_index(drop=True)
+
+
+def load_ai_jobs_market_dataset() -> pd.DataFrame:
+    """
+    Load the India-only slice of the AI jobs market dataset and normalize it
+    into the same schema as the main salary corpus.
+
+    This dataset is treated as full-time salary evidence only. Its USD annual
+    values are converted to INR monthly ranges so it can enrich full-time AI /
+    data / infra predictions without distorting intern-mode estimates.
+    """
+    if not os.path.exists(AI_JOBS_MARKET_DATA_PATH):
+        return pd.DataFrame()
+
+    raw_df = pd.read_csv(AI_JOBS_MARKET_DATA_PATH)
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    india_df = raw_df[
+        _series_from_df(raw_df, "country").astype(str).str.strip().str.lower().eq("india")
+    ].copy()
+    if india_df.empty:
+        return pd.DataFrame()
+
+    min_annual_usd = pd.to_numeric(
+        _series_from_df(india_df, "salary_min_usd"),
+        errors="coerce",
+    )
+    max_annual_usd = pd.to_numeric(
+        _series_from_df(india_df, "salary_max_usd"),
+        errors="coerce",
+    )
+    annual_usd = pd.to_numeric(
+        _series_from_df(india_df, "annual_salary_usd"),
+        errors="coerce",
+    )
+
+    minimum_monthly = (min_annual_usd.fillna(annual_usd) * USD_TO_INR_EXCHANGE_RATE) / 12.0
+    maximum_monthly = (max_annual_usd.fillna(annual_usd) * USD_TO_INR_EXCHANGE_RATE) / 12.0
+    midpoint_monthly = ((minimum_monthly + maximum_monthly) / 2.0).fillna(
+        (annual_usd * USD_TO_INR_EXCHANGE_RATE) / 12.0
+    )
+
+    title_series = _series_from_df(india_df, "job_title").astype(str).str.strip()
+    category_series = _series_from_df(india_df, "job_category").astype(str).str.strip()
+    skills_series = (
+        _series_from_df(india_df, "required_skills")
+        .astype(str)
+        .str.replace("|", ", ", regex=False)
+        .str.strip()
+    )
+
+    city_series = _series_from_df(india_df, "city").fillna("").astype(str).str.strip()
+    country_series = _series_from_df(india_df, "country").fillna("").astype(str).str.strip()
+    location_series = (
+        city_series.mask(city_series.eq("nan"), "")
+        + ", "
+        + country_series.mask(country_series.eq("nan"), "")
+    ).str.strip(", ")
+
+    normalized = pd.DataFrame(
+        {
+            "title": title_series,
+            "company": "AI Market Dataset",
+            "location": location_series,
+            "role_category": [
+                assign_role_category(title, job_category, skills)
+                for title, job_category, skills in zip(
+                    title_series,
+                    category_series,
+                    skills_series,
+                )
+            ],
+            "employment_status": "Full Time",
+            "source": "india_ai_jobs_market_dataset",
+            "job_url": "",
+            "search_query": category_series,
+            "description": "",
+            "duration": "",
+            "salary_report_count": 1.0,
+            "salary_annual": annual_usd * USD_TO_INR_EXCHANGE_RATE,
+            "salary_monthly_min": minimum_monthly,
+            "salary_monthly_max": maximum_monthly,
+            "salary_monthly_mid": midpoint_monthly,
+            "salary_value": [
+                format_monthly_range(low, high)
+                for low, high in zip(minimum_monthly, maximum_monthly)
+            ],
+            "is_internship_like": False,
+            "description_hint": (
+                "category="
+                + category_series
+                + " | experience="
+                + _series_from_df(india_df, "experience_level").astype(str).str.strip()
+                + " | skills="
+                + skills_series
+            ),
+        }
+    )
+
+    normalized = normalized[
+        normalized["salary_monthly_mid"].notna()
+        & normalized["salary_monthly_mid"].gt(0)
+    ].copy()
+
+    return normalized.reset_index(drop=True)
+
+
+def load_india_tech_jobs_dataset() -> pd.DataFrame:
+    """
+    Load the India tech jobs dataset, which is stored with an .xls extension
+    but is actually CSV text on disk.
+
+    Salary ranges appear to mix monthly and annual INR values, so we normalize
+    them with a simple magnitude-based heuristic:
+      - max <= 100,000 INR -> treat as monthly
+      - max > 100,000 INR -> treat as annual and divide by 12
+    """
+    if not os.path.exists(INDIA_TECH_JOBS_DATA_PATH):
+        return pd.DataFrame()
+
+    raw_df = pd.read_csv(INDIA_TECH_JOBS_DATA_PATH)
+    if raw_df.empty:
+        return pd.DataFrame()
+
+    min_amount = pd.to_numeric(_series_from_df(raw_df, "min_amount"), errors="coerce")
+    max_amount = pd.to_numeric(_series_from_df(raw_df, "max_amount"), errors="coerce")
+    currency_series = (
+        _series_from_df(raw_df, "currency").fillna("").astype(str).str.strip().str.upper()
+    )
+    salary_mask = (
+        min_amount.notna()
+        & max_amount.notna()
+        & min_amount.gt(0)
+        & max_amount.gt(0)
+        & currency_series.eq("INR")
+    )
+
+    salary_df = raw_df[salary_mask].copy().reset_index(drop=True)
+    if salary_df.empty:
+        return pd.DataFrame()
+
+    min_amount = min_amount[salary_mask].reset_index(drop=True)
+    max_amount = max_amount[salary_mask].reset_index(drop=True)
+    title_series = _series_from_df(salary_df, "title").astype(str).str.strip()
+    category_series = _series_from_df(salary_df, "category").astype(str).str.strip()
+    description_series = _series_from_df(salary_df, "description").astype(str).str.strip()
+    job_type_series = _series_from_df(salary_df, "job_type").astype(str).str.strip()
+
+    annual_mask = max_amount.gt(INDIA_TECH_MONTHLY_MAX_THRESHOLD)
+    minimum_monthly = min_amount.where(~annual_mask, min_amount / 12.0)
+    maximum_monthly = max_amount.where(~annual_mask, max_amount / 12.0)
+    midpoint_monthly = (minimum_monthly + maximum_monthly) / 2.0
+
+    combined_role_text = title_series + " " + job_type_series
+    trainee_mask = combined_role_text.str.contains(r"\btrainee\b", case=False, na=False)
+    internship_mask = combined_role_text.str.contains(
+        r"\bintern(?:ship)?\b",
+        case=False,
+        na=False,
+    )
+    employment_status = pd.Series("Full Time", index=salary_df.index, dtype="object")
+    employment_status = employment_status.mask(
+        job_type_series.str.contains(r"\bparttime\b", case=False, na=False),
+        "Part Time",
+    )
+    employment_status = employment_status.mask(
+        trainee_mask,
+        "Trainee",
+    )
+    employment_status = employment_status.mask(
+        internship_mask,
+        "Intern",
+    )
+
+    normalized = pd.DataFrame(
+        {
+            "title": title_series,
+            "company": _series_from_df(salary_df, "company").astype(str).str.strip(),
+            "location": _series_from_df(salary_df, "location").astype(str).str.strip(),
+            "role_category": [
+                assign_role_category(title, category, description)
+                for title, category, description in zip(
+                    title_series,
+                    category_series,
+                    description_series,
+                )
+            ],
+            "employment_status": employment_status,
+            "source": "india_tech_jobs_dataset",
+            "job_url": _series_from_df(salary_df, "job_url_direct")
+            .fillna(_series_from_df(salary_df, "job_url"))
+            .astype(str)
+            .str.strip(),
+            "search_query": category_series,
+            "description": "",
+            "duration": "",
+            "salary_report_count": 1.0,
+            "salary_annual": ((min_amount + max_amount) / 2.0).where(
+                annual_mask,
+                midpoint_monthly * 12.0,
+            ),
+            "salary_monthly_min": minimum_monthly,
+            "salary_monthly_max": maximum_monthly,
+            "salary_monthly_mid": midpoint_monthly,
+            "salary_value": [
+                format_monthly_range(low, high)
+                for low, high in zip(minimum_monthly, maximum_monthly)
+            ],
+            "is_internship_like": internship_mask | trainee_mask,
+            "description_hint": (
+                "category="
+                + category_series
+                + " | site="
+                + _series_from_df(salary_df, "site").astype(str).str.strip()
+                + " | type="
+                + job_type_series
+                + " | excerpt="
+                + description_series.str.slice(0, 180)
+            ),
+        }
+    )
+
+    normalized = normalized[
+        normalized["salary_monthly_mid"].notna()
+        & normalized["salary_monthly_mid"].gt(0)
+    ].copy()
+
+    return normalized.reset_index(drop=True)
 
 
 def load_local_salary_rows() -> pd.DataFrame:
@@ -501,11 +859,12 @@ def build_enriched_query(base_query: str, description_examples: list[dict[str, A
 def retrieve_salary_examples(
     salary_df: pd.DataFrame,
     query_text: str,
-    top_k: int = 5,
+    top_k: int | None = 5,
     prefer_internship: bool = True,
     allowed_employment_statuses: list[str] | None = None,
     job_title: str = "",
     job_location: str = "",
+    inferred_category: str | None = None,
 ) -> list[dict[str, Any]]:
     candidates = salary_df.copy()
 
@@ -521,6 +880,11 @@ def retrieve_salary_examples(
         internship_df = candidates[candidates["is_internship_like"].fillna(False)].copy()
         if not internship_df.empty:
             candidates = internship_df
+
+    if inferred_category:
+        category_filtered = filter_by_inferred_category(candidates, inferred_category)
+        if len(category_filtered) >= 3:
+            candidates = category_filtered
 
     if candidates.empty:
         return []
@@ -624,7 +988,7 @@ def retrieve_salary_examples(
     examples = []
     for idx in ranked_indexes:
         similarity = float(similarities[idx])
-        if len(examples) >= top_k:
+        if top_k is not None and len(examples) >= top_k:
             break
         if similarity <= 0 and examples:
             break
@@ -653,6 +1017,75 @@ def retrieve_salary_examples(
         )
 
     return examples
+
+
+def infer_category_from_skills(text: str) -> str | None:
+    """Pick the best-matching role category from skill keywords in free text.
+
+    Requires a confident leader (>=2 hits AND >= second place by 1) to avoid
+    over-filtering on ambiguous descriptions.
+    """
+    if not text:
+        return None
+
+    lowered = normalize_skill_text(text)
+    scores: dict[str, int] = {}
+    for category, skills in SKILL_CATEGORY_PATTERNS.items():
+        hits = sum(1 for skill in skills if skill in lowered)
+        if hits > 0:
+            scores[category] = hits
+
+    if not scores:
+        return None
+
+    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    top_category, top_hits = ranked[0]
+    if top_hits < 2:
+        return None
+    if len(ranked) == 1:
+        return top_category
+    if top_hits - ranked[1][1] >= 1:
+        return top_category
+    return None
+
+
+def filter_by_inferred_category(df: pd.DataFrame, category: str) -> pd.DataFrame:
+    """Hard-filter a salary corpus to rows whose role text matches the category regex."""
+    pattern = CATEGORY_ROLE_PATTERNS.get(category)
+    if not pattern or df.empty:
+        return df
+
+    def _col(name: str) -> pd.Series:
+        if name in df.columns:
+            return df[name].fillna("").astype(str).str.lower()
+        return pd.Series([""] * len(df), index=df.index, dtype="object")
+
+    haystack = _col("title") + " " + _col("role_category") + " " + _col("search_query")
+    mask = haystack.str.contains(pattern, na=False, regex=True)
+    return df[mask].copy()
+
+
+def assign_role_category(*parts: Any) -> str:
+    """
+    Map free-text role hints onto the internal category keys.
+
+    More specific categories are tested first (e.g. mlops before ai_ml,
+    analytics before data) so broader labels do not swallow clearer matches.
+    """
+    text = normalize_skill_text(" ".join(str(part or "") for part in parts))
+    if not text.strip():
+        return "general_tech"
+
+    for category in CATEGORY_ASSIGNMENT_PRIORITY:
+        pattern = CATEGORY_ROLE_PATTERNS.get(category)
+        if pattern and re.search(pattern, text):
+            return category
+    return "general_tech"
+
+
+def assign_kaggle_category(title: str, roles: str) -> str:
+    """Backwards-compatible wrapper for the Kaggle dataset mapper."""
+    return assign_role_category(title, roles)
 
 
 def build_heuristic_prediction(
@@ -722,7 +1155,7 @@ def build_heuristic_prediction(
         filtered = [
             example
             for example in numeric_examples
-            if midpoint / 2.5 <= example["midpoint"] <= midpoint * 2.5
+            if midpoint * 0.5 <= example["midpoint"] <= midpoint * 2.0
         ]
         if len(filtered) >= 2:
             minima = [example["minimum"] for example in filtered]
@@ -732,20 +1165,19 @@ def build_heuristic_prediction(
             midpoint = _weighted_quantile(midpoints, weights, 0.5)
 
     if len(midpoints) >= 3:
-        low = _weighted_quantile(minima, weights, 0.25)
-        high = _weighted_quantile(maxima, weights, 0.75)
+        low = _weighted_quantile(minima, weights, 0.35)
+        high = _weighted_quantile(maxima, weights, 0.65)
     else:
         low = min(minima)
         high = max(maxima)
 
     if low >= high:
-        padding = max(midpoint * 0.12, 1500.0)
+        padding = max(midpoint * 0.06, 1000.0)
         range_low = max(0.0, midpoint - padding / 2.0)
         range_high = midpoint + padding / 2.0
     else:
-        padding = max((high - low) * 0.08, midpoint * 0.05)
-        range_low = max(0.0, low - padding / 2.0)
-        range_high = high + padding / 2.0
+        range_low = max(0.0, low)
+        range_high = high
 
     description_note = (
         "Scraped LinkedIn-like descriptions were used to enrich retrieval for this prediction."
@@ -966,8 +1398,7 @@ def generate_with_cerebras(
 
 
 def looks_like_internship(text: str) -> bool:
-    lowered = text.lower()
-    return any(marker in lowered for marker in INTERNSHIP_MARKERS)
+    return bool(INTERNSHIP_PATTERN.search(text or ""))
 
 
 def normalize_employment_mode(mode: str) -> str:
@@ -1128,9 +1559,9 @@ def _series_from_df(df: pd.DataFrame, column: str, default: Any = "") -> pd.Seri
 
 
 def _normalize_lookup_text(text: Any) -> str:
-    lowered = str(text or "").strip().lower()
-    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
-    return re.sub(r"\s+", " ", lowered).strip()
+    normalized = normalize_skill_text(str(text or ""))
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _tokenize_text(text: Any) -> set[str]:

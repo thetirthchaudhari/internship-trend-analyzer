@@ -114,21 +114,38 @@
                 </div>
 
                 <div class="field-stack">
-                    <label for="salary_examples_count">
-                        Salary evidence depth
-                        <span class="range-badge" id="salaryExamplesValue">{{ salary_examples_count }}</span>
-                    </label>
+                    <label>Salary evidence depth</label>
+                    <div class="filter-chip-grid" id="salaryDepthModeGrid">
+                        <label class="filter-chip">
+                            <input
+                                type="radio"
+                                name="salary_examples_mode"
+                                value="all"
+                                {% if salary_examples_mode == 'all' %}checked{% endif %}
+                            >
+                            <span>All</span>
+                        </label>
+                        <label class="filter-chip">
+                            <input
+                                type="radio"
+                                name="salary_examples_mode"
+                                value="custom"
+                                {% if salary_examples_mode != 'all' %}checked{% endif %}
+                            >
+                            <span>Custom</span>
+                        </label>
+                    </div>
                     <input
                         id="salary_examples_count"
-                        type="range"
+                        type="number"
                         name="salary_examples_count"
-                        min="3"
-                        max="10"
+                        min="1"
                         step="1"
                         value="{{ salary_examples_count }}"
-                        class="prediction-range"
+                        class="prediction-number-input"
+                        {% if salary_examples_mode == 'all' %}disabled{% endif %}
                     >
-                    <div class="hint">Higher values let the retriever consider more salary examples before it builds the final range.</div>
+                    <div class="hint"><strong>All</strong> uses every ranked example; <strong>Custom</strong> caps the count at the value above.</div>
                 </div>
             </div>
 
@@ -362,20 +379,22 @@
 {% block extra_scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const slider = document.getElementById("salary_examples_count");
-  const sliderValue = document.getElementById("salaryExamplesValue");
+  const depthInput = document.getElementById("salary_examples_count");
+  const depthModeRadios = document.querySelectorAll('input[name="salary_examples_mode"]');
   const modeToggle = document.getElementById("full_time_mode");
   const statusCheckboxes = document.querySelectorAll('input[name="salary_statuses"]');
   const internLabel = document.querySelector('[data-mode-label="intern"]');
   const fullTimeLabel = document.querySelector('[data-mode-label="full_time"]');
 
-  if (slider && sliderValue) {
-    const syncValue = () => {
-      sliderValue.textContent = slider.value;
+  if (depthInput && depthModeRadios.length) {
+    const syncDepthMode = () => {
+      const selected = document.querySelector('input[name="salary_examples_mode"]:checked');
+      const isAll = selected && selected.value === "all";
+      depthInput.disabled = isAll;
     };
 
-    slider.addEventListener("input", syncValue);
-    syncValue();
+    depthModeRadios.forEach((radio) => radio.addEventListener("change", syncDepthMode));
+    syncDepthMode();
   }
 
   if (modeToggle && statusCheckboxes.length) {

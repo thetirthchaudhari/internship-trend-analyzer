@@ -25,7 +25,8 @@ print(f"\n[INFO] Opening Chrome with profile: {PROFILE_DIR}")
 print("[INFO] Please log into Naukri.com manually in the browser window.")
 print("[INFO] After logging in successfully, press ENTER here to save and close.\n")
 
-driver = uc.Chrome(options=opts, use_subprocess=True, version_main=145)
+# Let undetected_chromedriver match the locally installed Chrome version.
+driver = uc.Chrome(options=opts, use_subprocess=True)
 driver.get("https://www.naukri.com/nlogin/login")
 time.sleep(3)
 

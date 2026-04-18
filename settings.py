@@ -80,11 +80,18 @@ CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
 
 # Data sources
 KAGGLE_SALARY_DATA_PATH = str(DATASETS_DIR / "Salary_Dataset_with_Extra_Features.csv")
+AI_JOBS_MARKET_DATA_PATH = str(DATASETS_DIR / "ai_jobs_market_2025_2026.csv")
+INDIA_TECH_JOBS_DATA_PATH = str(DATASETS_DIR / "India_tech_jobs.xls")
+USD_TO_INR_EXCHANGE_RATE = float(os.getenv("USD_TO_INR_EXCHANGE_RATE", "83.0"))
 SCRAPED_DATA_PATHS = (
     str(DATA_DIR / "raw_jobs.csv"),
     str(DATA_DIR / "naukri_raw_jobs.csv"),
     str(DATA_DIR / "linkedin_raw_jobs.csv"),
 )
+
+# Naukri scraping interaction controls
+NAUKRI_MOUSE_ASSIST_ENABLED = True
+NAUKRI_MOUSE_KILL_CORNER_PX = 5
 
 # Shared UI labels / options
 CATEGORY_LABELS = {
@@ -104,7 +111,7 @@ CATEGORY_LABELS = {
     "general_tech": "General Tech",
 }
 
-DEFAULT_SCRAPE_QUERY_LIBRARY = {
+LINKEDIN_DEFAULT_SCRAPE_QUERY_LIBRARY = {
     "ai_ml": {
         "intern": ["machine learning intern"],
         "full_time": ["machine learning engineer"],
@@ -163,20 +170,85 @@ DEFAULT_SCRAPE_QUERY_LIBRARY = {
     },
 }
 
+NAUKRI_DEFAULT_SCRAPE_QUERY_LIBRARY = {
+    "ai_ml": {
+        "intern": ["machine learning intern"],
+        "full_time": ["machine learning engineer"],
+    },
+    "data": {
+        "intern": ["data analyst intern"],
+        "full_time": ["data analyst"],
+    },
+    "backend": {
+        "intern": ["backend developer intern"],
+        "full_time": ["backend developer"],
+    },
+    "frontend": {
+        "intern": ["frontend developer intern"],
+        "full_time": ["frontend developer"],
+    },
+    "fullstack": {
+        "intern": ["full stack developer intern"],
+        "full_time": ["full stack developer"],
+    },
+    "software": {
+        "intern": ["software developer intern"],
+        "full_time": ["software developer"],
+    },
+    "cloud_devops": {
+        "intern": ["devops intern"],
+        "full_time": ["devops engineer"],
+    },
+    "mlops": {
+        "intern": ["mlops intern"],
+        "full_time": ["mlops engineer"],
+    },
+    "mobile": {
+        "intern": ["android developer intern"],
+        "full_time": ["android developer"],
+    },
+    "security": {
+        "intern": ["cyber security intern"],
+        "full_time": ["cyber security analyst"],
+    },
+    "qa": {
+        "intern": ["software testing intern"],
+        "full_time": ["software tester"],
+    },
+    "analytics": {
+        "intern": ["business analyst intern"],
+        "full_time": ["business analyst"],
+    },
+    "research": {
+        "intern": ["research intern"],
+        "full_time": ["research engineer"],
+    },
+    "general_tech": {
+        "intern": ["it intern"],
+        "full_time": ["software engineer fresher"],
+    },
+}
 
-SCRAPE_QUERY_LIBRARY = {
+
+LINKEDIN_SCRAPE_QUERY_LIBRARY = {
     "ai_ml": {
         "intern": [
             "machine learning intern",
             "ai intern",
             "nlp intern",
             "computer vision intern",
+            "deep learning intern",
+            "generative ai intern",
+            "llm intern",
         ],
         "full_time": [
             "machine learning engineer",
             "ai engineer",
             "nlp engineer",
             "computer vision engineer",
+            "deep learning engineer",
+            "generative ai engineer",
+            "llm engineer",
         ],
     },
     "data": {
@@ -185,12 +257,16 @@ SCRAPE_QUERY_LIBRARY = {
             "data analyst intern",
             "data engineer intern",
             "business intelligence intern",
+            "sql developer intern",
+            "etl developer intern",
         ],
         "full_time": [
             "data engineer",
             "data analyst",
             "data scientist",
             "analytics engineer",
+            "etl developer",
+            "bi engineer",
         ],
     },
     "backend": {
@@ -199,12 +275,14 @@ SCRAPE_QUERY_LIBRARY = {
             "python developer intern",
             "java developer intern",
             "api developer intern",
+            "golang developer intern",
         ],
         "full_time": [
             "backend developer",
             "python developer",
             "java developer",
             "api engineer",
+            "golang developer",
         ],
     },
     "frontend": {
@@ -213,12 +291,14 @@ SCRAPE_QUERY_LIBRARY = {
             "react developer intern",
             "ui developer intern",
             "web developer intern",
+            "angular developer intern",
         ],
         "full_time": [
             "frontend developer",
             "react developer",
             "ui engineer",
             "web developer",
+            "angular developer",
         ],
     },
     "fullstack": {
@@ -255,12 +335,16 @@ SCRAPE_QUERY_LIBRARY = {
             "cloud intern",
             "site reliability intern",
             "platform engineering intern",
+            "aws intern",
+            "kubernetes intern",
         ],
         "full_time": [
             "devops engineer",
             "cloud engineer",
             "site reliability engineer",
             "platform engineer",
+            "aws engineer",
+            "kubernetes engineer",
         ],
     },
     "mlops": {
@@ -269,12 +353,14 @@ SCRAPE_QUERY_LIBRARY = {
             "machine learning platform intern",
             "data platform intern",
             "ml infrastructure intern",
+            "model deployment intern",
         ],
         "full_time": [
             "mlops engineer",
             "machine learning platform engineer",
             "data platform engineer",
             "ml infrastructure engineer",
+            "model deployment engineer",
         ],
     },
     "mobile": {
@@ -283,12 +369,14 @@ SCRAPE_QUERY_LIBRARY = {
             "android developer intern",
             "ios developer intern",
             "flutter developer intern",
+            "react native developer intern",
         ],
         "full_time": [
             "android developer",
             "ios developer",
             "flutter developer",
             "react native developer",
+            "kotlin developer",
         ],
     },
     "security": {
@@ -297,12 +385,16 @@ SCRAPE_QUERY_LIBRARY = {
             "security analyst intern",
             "application security intern",
             "cloud security intern",
+            "information security intern",
+            "soc analyst intern",
         ],
         "full_time": [
             "security engineer",
             "security analyst",
             "application security engineer",
             "cloud security engineer",
+            "information security analyst",
+            "soc analyst",
         ],
     },
     "qa": {
@@ -325,12 +417,14 @@ SCRAPE_QUERY_LIBRARY = {
             "business intelligence intern",
             "reporting analyst intern",
             "sql analyst intern",
+            "product analyst intern",
         ],
         "full_time": [
             "analytics engineer",
             "business intelligence analyst",
             "reporting analyst",
             "sql developer",
+            "product analyst",
         ],
     },
     "research": {
@@ -362,6 +456,233 @@ SCRAPE_QUERY_LIBRARY = {
         ],
     },
 }
+
+
+NAUKRI_SCRAPE_QUERY_LIBRARY = {
+    "ai_ml": {
+        "intern": [
+            "machine learning intern",
+            "ml intern",
+            "ai intern",
+            "data science intern",
+            "nlp intern",
+            "computer vision intern",
+            "deep learning intern",
+        ],
+        "full_time": [
+            "machine learning engineer",
+            "ml engineer",
+            "ai engineer",
+            "data scientist",
+            "nlp engineer",
+            "deep learning engineer",
+        ],
+    },
+    "data": {
+        "intern": [
+            "data analyst intern",
+            "data engineer intern",
+            "data science intern",
+            "sql intern",
+            "etl intern",
+            "power bi intern",
+        ],
+        "full_time": [
+            "data analyst",
+            "data engineer",
+            "data scientist",
+            "sql developer",
+            "etl developer",
+            "tableau developer",
+        ],
+    },
+    "backend": {
+        "intern": [
+            "backend developer intern",
+            "python developer intern",
+            "java developer intern",
+            "nodejs developer intern",
+            "spring boot intern",
+        ],
+        "full_time": [
+            "backend developer",
+            "python developer",
+            "java developer",
+            "nodejs developer",
+            "spring boot developer",
+        ],
+    },
+    "frontend": {
+        "intern": [
+            "frontend developer intern",
+            "react developer intern",
+            "angular developer intern",
+            "ui developer intern",
+            "web developer intern",
+        ],
+        "full_time": [
+            "frontend developer",
+            "react js developer",
+            "angular developer",
+            "ui developer",
+            "web developer",
+        ],
+    },
+    "fullstack": {
+        "intern": [
+            "full stack developer intern",
+            "mern stack intern",
+            "mean stack intern",
+            "full stack engineer intern",
+        ],
+        "full_time": [
+            "full stack developer",
+            "mern stack developer",
+            "mean stack developer",
+            "full stack engineer",
+        ],
+    },
+    "software": {
+        "intern": [
+            "software developer intern",
+            "software engineer intern",
+            "application developer intern",
+            "programmer intern",
+        ],
+        "full_time": [
+            "software developer",
+            "software engineer",
+            "application developer",
+            "programmer",
+        ],
+    },
+    "cloud_devops": {
+        "intern": [
+            "devops intern",
+            "cloud intern",
+            "aws intern",
+            "azure intern",
+            "kubernetes intern",
+            "sre intern",
+        ],
+        "full_time": [
+            "devops engineer",
+            "cloud engineer",
+            "aws engineer",
+            "azure engineer",
+            "kubernetes engineer",
+            "sre engineer",
+        ],
+    },
+    "mlops": {
+        "intern": [
+            "mlops intern",
+            "ml platform intern",
+            "ml infra intern",
+            "model deployment intern",
+        ],
+        "full_time": [
+            "mlops engineer",
+            "ml platform engineer",
+            "ml infrastructure engineer",
+            "model deployment engineer",
+        ],
+    },
+    "mobile": {
+        "intern": [
+            "android developer intern",
+            "ios developer intern",
+            "flutter developer intern",
+            "mobile app developer intern",
+            "react native intern",
+        ],
+        "full_time": [
+            "android developer",
+            "ios developer",
+            "flutter developer",
+            "mobile app developer",
+            "react native developer",
+        ],
+    },
+    "security": {
+        "intern": [
+            "cyber security intern",
+            "information security intern",
+            "soc analyst intern",
+            "application security intern",
+            "vapt intern",
+        ],
+        "full_time": [
+            "cyber security analyst",
+            "information security analyst",
+            "soc analyst",
+            "application security engineer",
+            "vapt engineer",
+        ],
+    },
+    "qa": {
+        "intern": [
+            "software testing intern",
+            "qa intern",
+            "sdet intern",
+            "automation testing intern",
+        ],
+        "full_time": [
+            "software tester",
+            "qa engineer",
+            "sdet",
+            "automation testing engineer",
+        ],
+    },
+    "analytics": {
+        "intern": [
+            "business analyst intern",
+            "business intelligence intern",
+            "analytics intern",
+            "reporting analyst intern",
+            "power bi intern",
+        ],
+        "full_time": [
+            "business analyst",
+            "business intelligence analyst",
+            "analytics engineer",
+            "reporting analyst",
+            "tableau developer",
+        ],
+    },
+    "research": {
+        "intern": [
+            "research intern",
+            "ai research intern",
+            "ml research intern",
+            "applied scientist intern",
+        ],
+        "full_time": [
+            "research engineer",
+            "ai researcher",
+            "machine learning researcher",
+            "applied scientist",
+        ],
+    },
+    "general_tech": {
+        "intern": [
+            "it intern",
+            "software intern",
+            "computer science intern",
+            "technology intern",
+        ],
+        "full_time": [
+            "software engineer fresher",
+            "graduate engineer trainee",
+            "associate software engineer",
+            "junior software engineer",
+        ],
+    },
+}
+
+
+DEFAULT_SCRAPE_QUERY_LIBRARY = LINKEDIN_DEFAULT_SCRAPE_QUERY_LIBRARY
+SCRAPE_QUERY_LIBRARY = LINKEDIN_SCRAPE_QUERY_LIBRARY
 
 
 def build_scrape_taxonomy(

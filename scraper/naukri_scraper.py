@@ -29,14 +29,17 @@ import time
 import random
 import os
 import hashlib
+from collections import Counter
 from datetime import datetime, timezone
 import html
 from urllib.parse import urlparse, parse_qs, unquote
 
 import pandas as pd
-# NOTE: we keep undetected_chromedriver import unused now, scraper runs via Safari
-# import undetected_chromedriver as uc
-from selenium import webdriver  # <-- Safari WebDriver
+import undetected_chromedriver as uc
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
@@ -50,7 +53,10 @@ from selenium.common.exceptions import (
 
 from logger import get_logger
 from settings import (
-    DEFAULT_SCRAPE_QUERY_LIBRARY,
+    NAUKRI_DEFAULT_SCRAPE_QUERY_LIBRARY,
+    NAUKRI_MOUSE_ASSIST_ENABLED as SETTINGS_NAUKRI_MOUSE_ASSIST_ENABLED,
+    NAUKRI_MOUSE_KILL_CORNER_PX as SETTINGS_NAUKRI_MOUSE_KILL_CORNER_PX,
+    NAUKRI_SCRAPE_QUERY_LIBRARY,
     build_scrape_taxonomy,
     infer_employment_status_from_query,
 )
@@ -77,15 +83,19 @@ CATEGORY_PAUSE_MAX  = 50.0
 
 NAUKRI_BASE         = "https://www.naukri.com"
 NAUKRI_HOMEPAGE     = "https://www.naukri.com/mnjuser/homepage"
+NAUKRI_MOUSE_ASSIST_DEFAULT = bool(SETTINGS_NAUKRI_MOUSE_ASSIST_ENABLED)
+NAUKRI_MOUSE_KILL_CORNER_PX = max(1, int(SETTINGS_NAUKRI_MOUSE_KILL_CORNER_PX))
 
 
 # ---------------------------------------------------------------------------
 # Search taxonomy
 # ---------------------------------------------------------------------------
 
-SEARCH_TAXONOMY = build_scrape_taxonomy()
+SEARCH_TAXONOMY = build_scrape_taxonomy(
+    query_library=NAUKRI_SCRAPE_QUERY_LIBRARY,
+)
 DEFAULT_SEARCH_TAXONOMY = build_scrape_taxonomy(
-    query_library=DEFAULT_SCRAPE_QUERY_LIBRARY,
+    query_library=NAUKRI_DEFAULT_SCRAPE_QUERY_LIBRARY,
 )
 
 
@@ -190,6 +200,34 @@ def limit_output_fields(
         return df
 
     return df.loc[:, keep_fields]
+
+
+def _build_persistence_stats() -> dict:
+    return {
+        "inserted": 0,
+        "duplicates": 0,
+        "total": 0,
+        "by_category": Counter(),
+    }
+
+
+def _record_completed_job(stats: dict, role_category: str) -> None:
+    stats["total"] += 1
+    stats["by_category"][role_category or "uncategorized"] += 1
+
+
+def _persist_completed_job(collection, job: dict, stats: dict) -> bool:
+    from database.mongo_client import insert_job
+
+    _record_completed_job(stats, str(job.get("role_category", "")).strip())
+    success = insert_job(collection, job)
+
+    if success:
+        stats["inserted"] += 1
+    else:
+        stats["duplicates"] += 1
+
+    return success
 
 
 # ---------------------------------------------------------------------------
@@ -450,57 +488,158 @@ def build_srp_url(query: str, page: int = 1) -> str:
 
 class NaukriScraper:
 
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = False, mouse_assist: bool | None = None):
         self.headless             = headless
         self.user_agent           = random.choice(USER_AGENTS)
         self.driver               = None
         self._session_hashes: set = set()
         self._first_query_done    = False
+        self.mouse_assist_enabled = (
+            NAUKRI_MOUSE_ASSIST_DEFAULT if mouse_assist is None else bool(mouse_assist)
+        )
+        self._mouse_kill_switch_triggered = False
         self._setup_driver()
 
     def _setup_driver(self):
         """
-        Create a Safari browser window and attach Selenium WebDriver to it.
+        Create a Chrome browser window using the persistent Naukri profile.
 
-        NOTE:
-        - Safari does NOT support real headless mode; if headless=True is passed,
-          we ignore it and run a normal visible Safari window.
-        - Make sure:
-            * Safari → Develop → “Allow Remote Automation” is enabled
-            * `safaridriver --enable` has been run once in terminal
+        This reuses the same profile directory as manual_naukri_login.py so the
+        scraper can benefit from the manually saved authenticated session.
         """
-        if self.headless:
+        profile_dir = os.path.join(os.path.expanduser("~"), "chrome_naukri_profile")
+        os.makedirs(profile_dir, exist_ok=True)
+
+        if self.mouse_assist_enabled and self.headless:
+            log.warning("Disabling Naukri mouse assist in headless mode.")
+            self.mouse_assist_enabled = False
+        if self.mouse_assist_enabled and pyautogui is None:
             log.warning(
-                "Safari WebDriver does not support headless mode. "
-                "Running in normal (visible) mode instead."
+                "Naukri mouse assist requested, but PyAutoGUI is not installed. "
+                "Run './venv/bin/pip install pyautogui' to enable it."
+            )
+            self.mouse_assist_enabled = False
+        if self.mouse_assist_enabled and pyautogui is not None:
+            pyautogui.FAILSAFE = True
+            pyautogui.PAUSE = 0
+            log.info(
+                "Naukri mouse assist enabled. Emergency kill switch: move the cursor to the top-left corner."
             )
 
         try:
-            # This uses the system Safari (macOS) WebDriver.
-            self.driver = webdriver.Safari()
-            # Optional: set a decent window size
-            try:
-                self.driver.set_window_size(1440, 900)
-            except Exception:
-                pass
+            opts = uc.ChromeOptions()
+            opts.add_argument(f"--user-data-dir={profile_dir}")
+            if self.headless:
+                opts.add_argument("--headless=new")
+            opts.add_argument(f"--user-agent={self.user_agent}")
+            opts.add_argument("--no-sandbox")
+            opts.add_argument("--disable-dev-shm-usage")
+            opts.add_argument("--disable-gpu")
+            opts.add_argument("--window-size=1440,900")
+            opts.add_argument("--lang=en-US,en;q=0.9")
+            opts.add_argument("--disable-blink-features=AutomationControlled")
 
-            # The anti-bot JS is harmless on Safari, but we keep it for consistency.
-            try:
-                self.driver.execute_script("""
-                    try {
-                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                        Object.defineProperty(navigator, 'plugins',   {get: () => [1, 2, 3]});
-                        Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                        window.chrome = window.chrome || { runtime: {} };
-                    } catch (e) {}
-                """)
-            except Exception:
-                pass
+            self.driver = uc.Chrome(options=opts, use_subprocess=True)
+            self.driver.execute_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'plugins',   {get: () => [1, 2, 3]});
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+                window.chrome = { runtime: {} };
+            """)
 
-            log.info("Naukri Safari browser ready.")
+            log.info("Naukri Chrome browser ready | profile: %s | UA: %s...", profile_dir, self.user_agent[:55])
         except Exception as e:
-            log.error("Failed to start Safari WebDriver: %s", e, exc_info=True)
+            log.error("Failed to start Naukri Chrome WebDriver: %s", e, exc_info=True)
             raise
+
+    def _disable_mouse_assist(self, reason: str):
+        if not self.mouse_assist_enabled:
+            return
+        self.mouse_assist_enabled = False
+        log.warning("Naukri mouse assist disabled: %s", reason)
+
+    def _check_mouse_kill_switch(self) -> bool:
+        if not self.mouse_assist_enabled or pyautogui is None:
+            return False
+        try:
+            x_pos, y_pos = pyautogui.position()
+        except Exception as exc:
+            self._disable_mouse_assist(f"could not read mouse position ({exc})")
+            return False
+
+        if x_pos <= NAUKRI_MOUSE_KILL_CORNER_PX and y_pos <= NAUKRI_MOUSE_KILL_CORNER_PX:
+            self._mouse_kill_switch_triggered = True
+            self._disable_mouse_assist("top-left corner failsafe triggered")
+            return True
+        return False
+
+    def _mouse_glide_to_element(self, element, label: str = "element"):
+        if not self.mouse_assist_enabled or pyautogui is None:
+            return
+        if self._check_mouse_kill_switch():
+            return
+
+        try:
+            metrics = self.driver.execute_script(
+                """
+                const rect = arguments[0].getBoundingClientRect();
+                return {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                    screenX: window.screenX || window.screenLeft || 0,
+                    screenY: window.screenY || window.screenTop || 0,
+                    outerWidth: window.outerWidth || 0,
+                    outerHeight: window.outerHeight || 0,
+                    innerWidth: window.innerWidth || 0,
+                    innerHeight: window.innerHeight || 0
+                };
+                """,
+                element,
+            )
+            chrome_left = max(
+                float(metrics["outerWidth"]) - float(metrics["innerWidth"]),
+                0.0,
+            ) / 2.0
+            chrome_top = max(
+                float(metrics["outerHeight"]) - float(metrics["innerHeight"]),
+                0.0,
+            )
+            target_x = int(
+                float(metrics["screenX"])
+                + chrome_left
+                + float(metrics["left"])
+                + (float(metrics["width"]) / 2.0)
+                + random.randint(-8, 8)
+            )
+            target_y = int(
+                float(metrics["screenY"])
+                + chrome_top
+                + float(metrics["top"])
+                + (float(metrics["height"]) / 2.0)
+                + random.randint(-6, 6)
+            )
+            target_x = max(1, target_x)
+            target_y = max(1, target_y)
+            tween = getattr(pyautogui, "easeInOutQuad", None)
+            move_kwargs = {"duration": random.uniform(0.18, 0.42)}
+            if tween is not None:
+                move_kwargs["tween"] = tween
+            pyautogui.moveTo(target_x, target_y, **move_kwargs)
+            if random.random() < 0.35:
+                pyautogui.moveRel(
+                    random.randint(-4, 4),
+                    random.randint(-3, 3),
+                    duration=random.uniform(0.04, 0.10),
+                )
+        except Exception as exc:
+            fail_safe_exc = getattr(pyautogui, "FailSafeException", None)
+            if fail_safe_exc and isinstance(exc, fail_safe_exc):
+                self._mouse_kill_switch_triggered = True
+                self._disable_mouse_assist("PyAutoGUI failsafe triggered")
+                return
+            log.debug("Mouse glide skipped for %s: %s", label, exc)
 
     def _check_session(self):
         log.info("Navigating to Naukri homepage...")
@@ -518,7 +657,7 @@ class NaukriScraper:
         except NoSuchElementException:
             log.warning(
                 "Naukri session may not be active. "
-                "If needed, log in manually in the opened Safari window."
+                "If needed, log in manually in the opened Chrome window."
             )
 
     def _dismiss_overlays(self):
@@ -527,6 +666,7 @@ class NaukriScraper:
                 btn = WebDriverWait(self.driver, 2).until(
                     EC.element_to_be_clickable((By.XPATH, xpath))
                 )
+                self._mouse_glide_to_element(btn, label="overlay close button")
                 btn.click()
                 log.debug("Dismissed overlay via: %s", xpath[:60])
                 time.sleep(0.5)
@@ -547,6 +687,7 @@ class NaukriScraper:
                     el = WebDriverWait(self.driver, 8).until(
                         EC.element_to_be_clickable((By.XPATH, xpath))
                     )
+                    self._mouse_glide_to_element(el, label="homepage search bar")
                     el.click()
                     human_delay(0.5, 1.2)
                     log.debug("Search bar activated")
@@ -561,6 +702,7 @@ class NaukriScraper:
                         jt_input = WebDriverWait(self.driver, 6).until(
                             EC.element_to_be_clickable((By.XPATH, xpath))
                         )
+                        self._mouse_glide_to_element(jt_input, label="job-type dropdown")
                         self.driver.execute_script("arguments[0].click();", jt_input)
                         human_delay(0.5, 1.0)
                         log.debug("Job-type dropdown opened")
@@ -574,6 +716,7 @@ class NaukriScraper:
                         option = WebDriverWait(self.driver, 5).until(
                             EC.element_to_be_clickable((By.XPATH, xpath))
                         )
+                        self._mouse_glide_to_element(option, label="internship option")
                         option.click()
                         human_delay(0.4, 0.9)
                         log.debug("'Internship' selected")
@@ -604,6 +747,7 @@ class NaukriScraper:
                 log.error("Keyword input not found on homepage")
                 return False
 
+            self._mouse_glide_to_element(kw_input, label="keyword input")
             kw_input.click()
             human_delay(0.3, 0.6)
             kw_input.send_keys(Keys.CONTROL + "a")
@@ -636,6 +780,7 @@ class NaukriScraper:
             for xpath in SEARCH_BTN_XPATHS:
                 try:
                     btn = self.driver.find_element(By.XPATH, xpath)
+                    self._mouse_glide_to_element(btn, label="search button")
                     btn.click()
                     human_delay(3, 5)
                     break
@@ -864,6 +1009,8 @@ class NaukriScraper:
         max_jobs: int,
         job_type: str = "2",
         location: str = "",
+        collection=None,
+        persistence_stats: dict | None = None,
     ) -> list:
         """
         Scrape a single (query, category) pair from Naukri.
@@ -935,7 +1082,6 @@ class NaukriScraper:
                 salary_final   = detail["salary"]           or parsed["salary"]
                 duration_final = detail["duration"]         or parsed["duration"]
 
-                self._session_hashes.add(h)
                 job = {
                     "title":         parsed["title"],
                     "company":       parsed["company"],
@@ -955,10 +1101,38 @@ class NaukriScraper:
                 if salary_final:
                     job["Salary"] = salary_final
 
+                persistence_error = None
+                was_inserted = None
+
+                if collection is not None and persistence_stats is not None:
+                    try:
+                        was_inserted = _persist_completed_job(
+                            collection=collection,
+                            job=job,
+                            stats=persistence_stats,
+                        )
+                    except Exception as exc:
+                        persistence_error = exc
+                        log.error(
+                            "Incremental Mongo persistence failed for Naukri job %s @ %s: %s",
+                            job["title"],
+                            job["company"],
+                            exc,
+                            exc_info=True,
+                        )
+
+                self._session_hashes.add(h)
                 jobs.append(job)
                 new_this_page += 1
+
+                persistence_state = ""
+                if was_inserted is True:
+                    persistence_state = " | persisted"
+                elif was_inserted is False:
+                    persistence_state = " | duplicate in Mongo"
+
                 log.info(
-                    "[%d/%d] %s @ %s | loc=%s | sal=%s | dur=%s",
+                    "[%d/%d] %s @ %s | loc=%s | sal=%s | dur=%s%s",
                     len(jobs),
                     max_jobs,
                     job["title"],
@@ -966,7 +1140,15 @@ class NaukriScraper:
                     job["location"],
                     job["salary"] or "—",
                     job["duration"] or "—",
+                    persistence_state,
                 )
+
+                if persistence_error is not None:
+                    log.warning(
+                        "Stopping Naukri query early after persistence failure; %d completed jobs from this query are still preserved in memory.",
+                        len(jobs),
+                    )
+                    return jobs
 
             log.info(
                 "Page %d done: +%d new | %d dupes | %d collected",
@@ -992,6 +1174,8 @@ class NaukriScraper:
         selected_categories: list[str] | None = None,
         selected_queries: list[str] | None = None,
         custom_queries: list[str] | None = None,
+        collection=None,
+        persistence_stats: dict | None = None,
     ) -> pd.DataFrame:
         self._check_session()
 
@@ -1011,7 +1195,13 @@ class NaukriScraper:
         for idx, (query, category) in enumerate(query_list, start=1):
             log.info("--- [%d/%d] '%s' | %s ---", idx, total_queries, query, category.upper())
             try:
-                jobs = self.scrape_query(query, category, max_jobs=jobs_per_query)
+                jobs = self.scrape_query(
+                    query,
+                    category,
+                    max_jobs=jobs_per_query,
+                    collection=collection,
+                    persistence_stats=persistence_stats,
+                )
                 all_jobs.extend(jobs)
                 log.info("Running total: %d", len(all_jobs))
             except Exception as e:
@@ -1060,6 +1250,7 @@ def scrape_and_store(
     selected_queries:    list[str] | None = None,
     custom_queries:      list[str] | None = None,
     selected_fields:     list[str] | None = None,
+    mouse_assist:        bool | None = None,
 ) -> dict:
     """
     Drop-in equivalent of linkedin_scraper.scrape_and_store().
@@ -1067,40 +1258,38 @@ def scrape_and_store(
     Now supports selected_categories, selected_queries, custom_queries,
     and optional output field selection.
     """
-    from database.mongo_client import get_collection, insert_jobs_bulk
+    from database.mongo_client import get_collection
 
     per_query = jobs_per_query or max_jobs or JOBS_PER_QUERY
-    scraper   = NaukriScraper(headless=headless)
+    collection = get_collection()
+    persistence_stats = _build_persistence_stats()
+    scraper   = NaukriScraper(headless=headless, mouse_assist=mouse_assist)
     df        = scraper.scrape_all_queries(
         jobs_per_query=per_query,
         selected_categories=selected_categories,
         selected_queries=selected_queries,
         custom_queries=custom_queries,
+        collection=collection,
+        persistence_stats=persistence_stats,
     )
     df = limit_output_fields(df, selected_fields=selected_fields)
 
     if df.empty:
         log.warning("No Naukri jobs scraped")
-        return {"df": df, "inserted": 0, "duplicates": 0, "total": 0, "by_category": {}}
+        return {
+            "df": df,
+            "inserted": persistence_stats["inserted"],
+            "duplicates": persistence_stats["duplicates"],
+            "total": persistence_stats["total"],
+            "by_category": dict(persistence_stats["by_category"]),
+        }
 
     save_to_csv(df, filename="naukri_raw_jobs.csv", output_dir="data")
 
-    try:
-        collection = get_collection()
-        stats      = insert_jobs_bulk(collection, df)
-    except Exception as e:
-        log.error("MongoDB insert failed: %s", e, exc_info=True)
-        stats = {"inserted": 0, "duplicates": 0, "total": len(df)}
-
-    by_category = (
-        df["role_category"].value_counts().to_dict()
-        if "role_category" in df.columns else {}
-    )
-
     return {
         "df":          df,
-        "inserted":    stats["inserted"],
-        "duplicates":  stats["duplicates"],
-        "total":       stats["total"],
-        "by_category": by_category,
+        "inserted":    persistence_stats["inserted"],
+        "duplicates":  persistence_stats["duplicates"],
+        "total":       persistence_stats["total"],
+        "by_category": dict(persistence_stats["by_category"]),
     }

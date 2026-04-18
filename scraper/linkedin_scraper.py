@@ -21,6 +21,7 @@ import time
 import random
 import os
 import hashlib
+from collections import Counter
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -38,7 +39,8 @@ from selenium.common.exceptions import (
 
 from logger import get_logger
 from settings import (
-    DEFAULT_SCRAPE_QUERY_LIBRARY,
+    LINKEDIN_DEFAULT_SCRAPE_QUERY_LIBRARY,
+    LINKEDIN_SCRAPE_QUERY_LIBRARY,
     build_scrape_taxonomy,
     infer_employment_status_from_query,
 )
@@ -70,9 +72,11 @@ LINKEDIN_JOBS_BASE  = "https://www.linkedin.com/jobs/search/"
 # Search taxonomy
 # ---------------------------------------------------------------------------
 
-SEARCH_TAXONOMY = build_scrape_taxonomy()
+SEARCH_TAXONOMY = build_scrape_taxonomy(
+    query_library=LINKEDIN_SCRAPE_QUERY_LIBRARY,
+)
 DEFAULT_SEARCH_TAXONOMY = build_scrape_taxonomy(
-    query_library=DEFAULT_SCRAPE_QUERY_LIBRARY,
+    query_library=LINKEDIN_DEFAULT_SCRAPE_QUERY_LIBRARY,
 )
 
 QUERY_TO_CATEGORY = {
@@ -175,6 +179,34 @@ def limit_output_fields(
         return df
 
     return df.loc[:, keep_fields]
+
+
+def _build_persistence_stats() -> dict:
+    return {
+        "inserted": 0,
+        "duplicates": 0,
+        "total": 0,
+        "by_category": Counter(),
+    }
+
+
+def _record_completed_job(stats: dict, role_category: str) -> None:
+    stats["total"] += 1
+    stats["by_category"][role_category or "uncategorized"] += 1
+
+
+def _persist_completed_job(collection, job: dict, stats: dict) -> bool:
+    from database.mongo_client import insert_job
+
+    _record_completed_job(stats, str(job.get("role_category", "")).strip())
+    success = insert_job(collection, job)
+
+    if success:
+        stats["inserted"] += 1
+    else:
+        stats["duplicates"] += 1
+
+    return success
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +392,9 @@ class LinkedInScraper:
         opts.add_argument("--lang=en-US,en;q=0.9")
         opts.add_argument("--disable-blink-features=AutomationControlled")
 
-        self.driver = uc.Chrome(options=opts, use_subprocess=True, version_main=145)
+        # Allow undetected_chromedriver to match the installed Chrome build
+        # so browser auto-updates do not break the scraper.
+        self.driver = uc.Chrome(options=opts, use_subprocess=True)
         self.driver.execute_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
             Object.defineProperty(navigator, 'plugins',   {get: () => [1, 2, 3]});
@@ -563,7 +597,14 @@ class LinkedInScraper:
 
     # --- Scrape one query ---
 
-    def scrape_query(self, query: str, category: str, max_jobs: int) -> list:
+    def scrape_query(
+        self,
+        query: str,
+        category: str,
+        max_jobs: int,
+        collection=None,
+        persistence_stats: dict | None = None,
+    ) -> list:
         log.info("Query: '%s' | category: %s | target: %d", query, category, max_jobs)
 
         jobs       = []
@@ -628,7 +669,6 @@ class LinkedInScraper:
                 human_delay(JOB_DELAY_MIN, JOB_DELAY_MAX)
                 description = self._fetch_description(parsed["job_url"])
 
-                self._session_hashes.add(h)
                 job = {
                     "title":         parsed["title"],
                     "company":       parsed["company"],
@@ -641,12 +681,53 @@ class LinkedInScraper:
                     "employment_status": infer_employment_status_from_query(query),
                     "scraped_at":    datetime.now(timezone.utc),
                 }
+
+                persistence_error = None
+                was_inserted = None
+
+                if collection is not None and persistence_stats is not None:
+                    try:
+                        was_inserted = _persist_completed_job(
+                            collection=collection,
+                            job=job,
+                            stats=persistence_stats,
+                        )
+                    except Exception as exc:
+                        persistence_error = exc
+                        log.error(
+                            "Incremental Mongo persistence failed for LinkedIn job %s @ %s: %s",
+                            job["title"],
+                            job["company"],
+                            exc,
+                            exc_info=True,
+                        )
+
+                self._session_hashes.add(h)
                 jobs.append(job)
                 new_this_page += 1
+
+                persistence_state = ""
+                if was_inserted is True:
+                    persistence_state = " | persisted"
+                elif was_inserted is False:
+                    persistence_state = " | duplicate in Mongo"
+
                 log.info(
-                    "[%d/%d] %s @ %s | %s",
-                    len(jobs), max_jobs, job["title"], job["company"], job["location"]
+                    "[%d/%d] %s @ %s | %s%s",
+                    len(jobs),
+                    max_jobs,
+                    job["title"],
+                    job["company"],
+                    job["location"],
+                    persistence_state,
                 )
+
+                if persistence_error is not None:
+                    log.warning(
+                        "Stopping LinkedIn query early after persistence failure; %d completed jobs from this query are still preserved in memory.",
+                        len(jobs),
+                    )
+                    return jobs
 
             log.info("Page %d: +%d new | %d dupes total", page_num + 1, new_this_page, dupes)
 
@@ -668,6 +749,8 @@ class LinkedInScraper:
         selected_categories: list[str] | None = None,
         selected_queries: list[str] | None = None,
         custom_queries: list[str] | None = None,
+        collection=None,
+        persistence_stats: dict | None = None,
     ) -> pd.DataFrame:
         """Run scraping across multiple queries/categories."""
         self._login()
@@ -691,7 +774,13 @@ class LinkedInScraper:
                 idx, total_queries, query, category.upper(),
             )
             try:
-                jobs = self.scrape_query(query, category, max_jobs=jobs_per_query)
+                jobs = self.scrape_query(
+                    query,
+                    category,
+                    max_jobs=jobs_per_query,
+                    collection=collection,
+                    persistence_stats=persistence_stats,
+                )
                 all_jobs.extend(jobs)
                 log.info("Running total: %d", len(all_jobs))
             except Exception as e:
@@ -760,40 +849,38 @@ def scrape_and_store(
       - custom_queries: extra queries (category='custom')
       - selected_fields: optional output columns to keep
     """
-    from database.mongo_client import get_collection, insert_jobs_bulk
+    from database.mongo_client import get_collection
 
     per_query = jobs_per_query or max_jobs or JOBS_PER_QUERY
+    collection = get_collection()
+    persistence_stats = _build_persistence_stats()
     scraper   = LinkedInScraper(li_at_cookie=li_at_cookie, headless=headless)
     df        = scraper.scrape_all_queries(
         jobs_per_query=per_query,
         selected_categories=selected_categories,
         selected_queries=selected_queries,
         custom_queries=custom_queries,
+        collection=collection,
+        persistence_stats=persistence_stats,
     )
     df = limit_output_fields(df, selected_fields=selected_fields)
 
     if df.empty:
         log.warning("No LinkedIn jobs scraped")
-        return {"df": df, "inserted": 0, "duplicates": 0, "total": 0, "by_category": {}}
+        return {
+            "df": df,
+            "inserted": persistence_stats["inserted"],
+            "duplicates": persistence_stats["duplicates"],
+            "total": persistence_stats["total"],
+            "by_category": dict(persistence_stats["by_category"]),
+        }
 
     save_to_csv(df, filename="linkedin_raw_jobs.csv", output_dir="data")
 
-    try:
-        collection = get_collection()
-        stats      = insert_jobs_bulk(collection, df)
-    except Exception as e:
-        log.error("MongoDB insert failed: %s", e, exc_info=True)
-        stats = {"inserted": 0, "duplicates": 0, "total": len(df)}
-
-    by_category = (
-        df["role_category"].value_counts().to_dict()
-        if "role_category" in df.columns else {}
-    )
-
     return {
         "df":          df,
-        "inserted":    stats["inserted"],
-        "duplicates":  stats["duplicates"],
-        "total":       stats["total"],
-        "by_category": by_category,
+        "inserted":    persistence_stats["inserted"],
+        "duplicates":  persistence_stats["duplicates"],
+        "total":       persistence_stats["total"],
+        "by_category": dict(persistence_stats["by_category"]),
     }

@@ -28,6 +28,34 @@ from logger import get_logger
 log = get_logger(__name__)
 
 
+TEXT_NORMALIZATION_REPLACEMENTS = (
+    ("c++", " cplusplus "),
+    ("c#", " csharp "),
+    ("node.js", " nodejs "),
+    ("react.js", " reactjs "),
+    ("next.js", " nextjs "),
+    ("express.js", " expressjs "),
+    ("scikit-learn", " scikit learn "),
+    ("power bi", " powerbi "),
+    ("ci/cd", " cicd "),
+    ("gen ai", " generative ai "),
+    ("genai", " generative ai "),
+    ("ml ops", " mlops "),
+    ("machine-learning", " machine learning "),
+    ("deep-learning", " deep learning "),
+    ("full-stack", " full stack "),
+)
+
+
+def _normalize_token_surface(text: str) -> str:
+    text = str(text).lower()
+    for source, replacement in TEXT_NORMALIZATION_REPLACEMENTS:
+        text = text.replace(source, replacement)
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
 # ---------------------------------------------------------------------------
 # Skills taxonomy
 # ---------------------------------------------------------------------------
@@ -66,6 +94,85 @@ SKILLS_TAXONOMY = {
 
 ALL_SKILLS = [skill for skills in SKILLS_TAXONOMY.values() for skill in skills]
 
+SKILL_ALIAS_GROUPS = {
+    "c++": ("c++", "cplusplus", "cpp"),
+    "javascript": ("javascript", "js"),
+    "machine learning": ("machine learning", "ml"),
+    "deep learning": ("deep learning", "dl"),
+    "scikit-learn": ("scikit-learn", "scikit learn", "sklearn"),
+    "hugging face": ("hugging face", "huggingface"),
+    "llm": ("llm", "llms", "large language model", "large language models"),
+    "generative ai": ("generative ai", "genai", "gen ai"),
+    "natural language processing": ("natural language processing", "nlp"),
+    "power bi": ("power bi", "powerbi"),
+    "rest api": ("rest api", "rest apis", "restful api", "restful apis"),
+    "node.js": ("node.js", "nodejs", "node js"),
+    "react": ("react", "reactjs", "react js"),
+    "next.js": ("next.js", "nextjs", "next js"),
+    "ci/cd": ("ci/cd", "cicd", "ci cd"),
+    "mlops": ("mlops", "ml ops", "ml operations"),
+}
+
+
+def _build_skill_alias_data() -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
+    alias_lookup: dict[str, str] = {}
+    variants_by_skill: dict[str, tuple[str, ...]] = {}
+
+    for skill in ALL_SKILLS:
+        raw_variants = SKILL_ALIAS_GROUPS.get(skill, (skill,))
+        normalized_variants = []
+        for variant in (skill, *raw_variants):
+            normalized = _normalize_token_surface(variant)
+            if not normalized:
+                continue
+            alias_lookup[normalized] = skill
+            if normalized not in normalized_variants:
+                normalized_variants.append(normalized)
+        variants_by_skill[skill] = tuple(normalized_variants)
+
+    return alias_lookup, variants_by_skill
+
+
+SKILL_ALIAS_LOOKUP, SKILL_VARIANTS = _build_skill_alias_data()
+
+
+def normalize_skill_text(text: str) -> str:
+    return _normalize_token_surface(text)
+
+
+def canonicalize_skill(skill: str) -> str:
+    normalized = normalize_skill_text(skill)
+    if not normalized:
+        return ""
+    return SKILL_ALIAS_LOOKUP.get(normalized, normalized)
+
+
+def expand_skill_aliases(skill: str) -> tuple[str, ...]:
+    canonical = canonicalize_skill(skill)
+    if not canonical:
+        return tuple()
+    return SKILL_VARIANTS.get(canonical, (normalize_skill_text(skill),))
+
+
+def normalize_skill_inputs(skills: list[str]) -> list[str]:
+    normalized_skills: list[str] = []
+    seen: set[str] = set()
+
+    for skill in skills:
+        canonical = canonicalize_skill(skill)
+        if canonical and canonical not in seen:
+            normalized_skills.append(canonical)
+            seen.add(canonical)
+
+    return normalized_skills
+
+
+def _series_contains_skill(series: pd.Series, skill: str) -> pd.Series:
+    mask = pd.Series(False, index=series.index)
+    for variant in expand_skill_aliases(skill):
+        mask = mask | series.str.contains(variant, regex=False, na=False)
+    return mask
+
 
 # ---------------------------------------------------------------------------
 # 1. Skill Frequency Analysis
@@ -84,11 +191,13 @@ def count_skills(df: pd.DataFrame) -> pd.Series:
         log.warning("count_skills: empty DataFrame or missing 'title' column")
         return pd.Series(dtype=int)
 
-    combined = df["title"].fillna("") + " " + df["description"].fillna("")
+    combined = (
+        df["title"].fillna("").astype(str) + " " + df["description"].fillna("").astype(str)
+    ).apply(normalize_skill_text)
     skill_counts = {}
 
     for skill in ALL_SKILLS:
-        count = combined.str.contains(skill, case=False, na=False, regex=False).sum()
+        count = _series_contains_skill(combined, skill).sum()
         if count > 0:
             skill_counts[skill] = int(count)
 
@@ -179,11 +288,13 @@ def score_skills_by_tfidf(df: pd.DataFrame) -> pd.Series:
         skill_scores = {}
 
         for skill in ALL_SKILLS:
-            if skill in vocab:
-                col_idx = vocab[skill]
-                score   = float(tfidf_matrix[:, col_idx].sum())
-                if score > 0:
-                    skill_scores[skill] = round(score, 4)
+            score = 0.0
+            for variant in expand_skill_aliases(skill):
+                if variant in vocab:
+                    col_idx = vocab[variant]
+                    score += float(tfidf_matrix[:, col_idx].sum())
+            if score > 0:
+                skill_scores[skill] = round(score, 4)
 
         result = pd.Series(skill_scores).sort_values(ascending=False)
         log.info("TF-IDF skill scoring complete: %d skills scored", len(result))
@@ -209,11 +320,13 @@ def compute_skill_cooccurrence(df: pd.DataFrame, top_skills: int = 15) -> pd.Dat
         log.warning("compute_skill_cooccurrence: empty DataFrame")
         return pd.DataFrame()
 
-    combined    = df["title"].fillna("") + " " + df["description"].fillna("")
+    combined = (
+        df["title"].fillna("").astype(str) + " " + df["description"].fillna("").astype(str)
+    ).apply(normalize_skill_text)
     freq_counts = {}
 
     for skill in ALL_SKILLS:
-        count = combined.str.contains(skill, case=False, na=False, regex=False).sum()
+        count = _series_contains_skill(combined, skill).sum()
         if count > 0:
             freq_counts[skill] = count
 
@@ -222,10 +335,7 @@ def compute_skill_cooccurrence(df: pd.DataFrame, top_skills: int = 15) -> pd.Dat
         return pd.DataFrame()
 
     top      = sorted(freq_counts, key=freq_counts.get, reverse=True)[:top_skills]
-    presence = {
-        skill: combined.str.contains(skill, case=False, na=False, regex=False).astype(int)
-        for skill in top
-    }
+    presence = {skill: _series_contains_skill(combined, skill).astype(int) for skill in top}
 
     presence_df = pd.DataFrame(presence)
     cooccur     = presence_df.T.dot(presence_df)
@@ -250,7 +360,9 @@ def get_category_breakdown(df: pd.DataFrame) -> pd.DataFrame:
         log.warning("get_category_breakdown: empty DataFrame")
         return pd.DataFrame()
 
-    combined = df["title"].fillna("") + " " + df["description"].fillna("")
+    combined = (
+        df["title"].fillna("").astype(str) + " " + df["description"].fillna("").astype(str)
+    ).apply(normalize_skill_text)
     rows     = []
 
     for category, skills in SKILLS_TAXONOMY.items():
@@ -258,7 +370,7 @@ def get_category_breakdown(df: pd.DataFrame) -> pd.DataFrame:
         found_skills   = {}
 
         for skill in skills:
-            count = combined.str.contains(skill, case=False, na=False, regex=False).sum()
+            count = _series_contains_skill(combined, skill).sum()
             if count > 0:
                 found_skills[skill] = int(count)
                 total_mentions     += int(count)
@@ -329,10 +441,7 @@ def _normalize_text(text: str) -> str:
         "C++ / TensorFlow"   -> "c   tensorflow"   (+ collapsed to space)
         "  NLP  "            -> "nlp"
     """
-    text = str(text).lower()
-    text = re.sub(r"[^\w\s]", " ", text)   # punctuation → space
-    text = re.sub(r"\s+", " ", text)        # collapse whitespace
-    return text.strip()
+    return normalize_skill_text(text)
 
 
 def _build_search_corpus(df: pd.DataFrame) -> pd.Series:
@@ -397,8 +506,9 @@ def search_jobs_by_skills(df: pd.DataFrame, skills: list) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Step 1 — normalize user skills
-    normalized_skills = [_normalize_text(s) for s in skills if str(s).strip()]
-    normalized_skills = [s for s in normalized_skills if s]
+    normalized_skills = normalize_skill_inputs(
+        [str(skill) for skill in skills if str(skill).strip()]
+    )
 
     if not normalized_skills:
         log.warning("search_jobs_by_skills: all skills were empty after normalization")
@@ -429,15 +539,13 @@ def search_jobs_by_skills(df: pd.DataFrame, skills: list) -> pd.DataFrame:
     ).str.strip()
 
     # Step 3 — exact skill overlap
-    skill_hits = {
-        skill: enriched_corpus.str.contains(skill, regex=False, na=False)
-        for skill in normalized_skills
-    }
+    skill_hits = {skill: _series_contains_skill(enriched_corpus, skill) for skill in normalized_skills}
 
     hits_df = pd.DataFrame(skill_hits, index=df.index)
     match_score = hits_df.sum(axis=1)
 
-    matched_mask = match_score >= 1
+    min_required_matches = 1 if len(normalized_skills) <= 2 else 2
+    matched_mask = match_score >= min_required_matches
     if not matched_mask.any():
         log.info("search_jobs_by_skills: no matches found for skills: %s", normalized_skills)
         return pd.DataFrame()
@@ -456,7 +564,15 @@ def search_jobs_by_skills(df: pd.DataFrame, skills: list) -> pd.DataFrame:
     result["skill_overlap_score"] = result["match_score"] / max_possible
 
     # Step 5 — TF-IDF similarity
-    query_text = " ".join(normalized_skills)
+    expanded_query_terms: list[str] = []
+    seen_terms: set[str] = set()
+    for skill in normalized_skills:
+        for variant in expand_skill_aliases(skill):
+            if variant not in seen_terms:
+                expanded_query_terms.append(variant)
+                seen_terms.add(variant)
+
+    query_text = " ".join(expanded_query_terms or normalized_skills)
 
     try:
         tfidf_vectorizer = TfidfVectorizer(
@@ -486,8 +602,8 @@ def search_jobs_by_skills(df: pd.DataFrame, skills: list) -> pd.DataFrame:
 
     # Step 6 — hybrid score
     result["final_score"] = (
-        0.35 * result["skill_overlap_score"] +
-        0.65 * result["tfidf_similarity"]
+        0.55 * result["skill_overlap_score"] +
+        0.45 * result["tfidf_similarity"]
     )
 
     # Step 7 — rank
