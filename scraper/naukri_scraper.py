@@ -53,7 +53,9 @@ from selenium.common.exceptions import (
 
 from logger import get_logger
 from settings import (
+    NAUKRI_ALLOW_MOUSE_ASSIST_IN_BACKGROUND as SETTINGS_NAUKRI_ALLOW_MOUSE_ASSIST_IN_BACKGROUND,
     NAUKRI_DEFAULT_SCRAPE_QUERY_LIBRARY,
+    NAUKRI_KEEP_BACKGROUND as SETTINGS_NAUKRI_KEEP_BACKGROUND,
     NAUKRI_MOUSE_ASSIST_ENABLED as SETTINGS_NAUKRI_MOUSE_ASSIST_ENABLED,
     NAUKRI_MOUSE_KILL_CORNER_PX as SETTINGS_NAUKRI_MOUSE_KILL_CORNER_PX,
     NAUKRI_SCRAPE_QUERY_LIBRARY,
@@ -72,17 +74,23 @@ JOBS_PER_QUERY      = 5
 PAGE_SIZE           = 20
 MAX_PAGES_PER_QUERY = 3
 
-JOB_DELAY_MIN       = 3.0
-JOB_DELAY_MAX       = 7.0
+JOB_DELAY_MIN       = 0.5
+JOB_DELAY_MAX       = 1.5
 
-QUERY_PAUSE_MIN     = 10.0
-QUERY_PAUSE_MAX     = 20.0
+QUERY_PAUSE_MIN     = 0.5
+QUERY_PAUSE_MAX     = 1.5
 
-CATEGORY_PAUSE_MIN  = 25.0
-CATEGORY_PAUSE_MAX  = 50.0
+CATEGORY_PAUSE_MIN  = 0.5
+CATEGORY_PAUSE_MAX  = 1.5
 
 NAUKRI_BASE         = "https://www.naukri.com"
 NAUKRI_HOMEPAGE     = "https://www.naukri.com/mnjuser/homepage"
+ELEMENT_WAIT_TIMEOUT = 6.0
+CARD_WAIT_TIMEOUT    = 6.0
+NAUKRI_ALLOW_MOUSE_ASSIST_IN_BACKGROUND_DEFAULT = bool(
+    SETTINGS_NAUKRI_ALLOW_MOUSE_ASSIST_IN_BACKGROUND
+)
+NAUKRI_KEEP_BACKGROUND_DEFAULT = bool(SETTINGS_NAUKRI_KEEP_BACKGROUND)
 NAUKRI_MOUSE_ASSIST_DEFAULT = bool(SETTINGS_NAUKRI_MOUSE_ASSIST_ENABLED)
 NAUKRI_MOUSE_KILL_CORNER_PX = max(1, int(SETTINGS_NAUKRI_MOUSE_KILL_CORNER_PX))
 
@@ -250,9 +258,16 @@ USER_AGENTS = [
 # Search bar (homepage) -------------------------------------------------------
 
 SEARCHBAR_WRAPPER_XPATHS = [
+    "//span[contains(@class,'nI-gNb-sb__placeholder') and contains(.,'Search jobs here')]",
     "//div[contains(@class,'nI-gNb-sb__main')]",
     "//div[contains(@class,'nI-gNb-sb__full-view')]",
     "//span[contains(@class,'nI-gNb-sb__placeholder')]",
+]
+
+SEARCHBAR_EXPANDED_XPATHS = [
+    "//div[contains(@class,'nI-gNb-sb__main--expand')]",
+    "//div[contains(@class,'nI-gNb-sb__full-view--expand')]",
+    "//div[contains(@class,'nI-gNb-sugg')]//input[contains(@class,'suggestor-input') and @tabindex='0']",
 ]
 
 JOBTYPE_INPUT_XPATHS = [
@@ -266,6 +281,13 @@ INTERNSHIP_OPTION_XPATHS = [
     "//li[@title='Internship']",
     "//ul[contains(@class,'dropdown')]//li[normalize-space(text())='Internship']",
     "//ul[contains(@class,'dropdown')]//li[contains(.,'Internship')]",
+]
+
+JOB_OPTION_XPATHS = [
+    "//li[@value='ajob']",
+    "//li[@title='Job']",
+    "//ul[contains(@class,'dropdown')]//li[normalize-space(text())='Job']",
+    "//ul[contains(@class,'dropdown')]//li[contains(.,'Job')]",
 ]
 
 KEYWORD_INPUT_XPATHS = [
@@ -311,6 +333,8 @@ LOCATION_CARD_XPATHS = [
 ]
 
 SALARY_CARD_XPATHS = [
+    ".//span[contains(@class,'sal-wrap')]//span[@title]",
+    ".//span[contains(@class,'ni-job-tuple-icon-srp-rupee')]//span[@title]",
     ".//*[contains(@class,'sal-wrap')]//span[not(contains(@class,'icon'))]",
     ".//*[contains(@class,'sal')]//span[@title]",
     ".//*[contains(@class,'salary')]",
@@ -384,7 +408,7 @@ OVERLAY_CLOSE_XPATHS = [
 # Utilities
 # ---------------------------------------------------------------------------
 
-def human_delay(mn: float = 1.5, mx: float = 4.0):
+def human_delay(mn: float = 0.5, mx: float = 1.5):
     time.sleep(random.uniform(mn, mx))
 
 
@@ -433,6 +457,95 @@ def extract_query_from_url(url: str) -> str:
         return unquote(slug)
     except Exception:
         return ""
+
+
+def normalize_job_url(url: str) -> str:
+    """
+    Canonicalize a Naukri job URL so the same card can be recognized across
+    different queries and tracking variants before we open the detail page.
+    """
+    if not url:
+        return ""
+
+    try:
+        parsed = urlparse(url.strip())
+        scheme = (parsed.scheme or "https").lower()
+        netloc = parsed.netloc.lower()
+        path = re.sub(r"/+$", "", parsed.path or "")
+        if not netloc:
+            return path
+        return f"{scheme}://{netloc}{path}"
+    except Exception:
+        return url.strip()
+
+
+NON_ACTIONABLE_SALARY_MARKERS = (
+    "not disclosed",
+    "not mention",
+    "negotiable",
+    "as per industry",
+    "industry standards",
+    "best in industry",
+    "competitive salary",
+    "no salary bar",
+    "no bar",
+    "depends on interview",
+    "based on interview",
+    "salary negotiable",
+)
+
+NAUKRI_MIN_SALARY_ANNUAL_INR = 300000.0
+
+
+def has_actionable_salary(raw_salary: str) -> bool:
+    if not raw_salary:
+        return False
+
+    salary = clean_multiline_text(str(raw_salary)).lower()
+    if not salary or salary == "nan":
+        return False
+
+    if any(marker in salary for marker in NON_ACTIONABLE_SALARY_MARKERS):
+        return False
+
+    return any(ch.isdigit() for ch in salary)
+
+
+def estimate_annual_salary_floor(raw_salary: str) -> float | None:
+    if not has_actionable_salary(raw_salary):
+        return None
+
+    salary = clean_multiline_text(str(raw_salary)).lower()
+    numbers = [
+        float(num.replace(",", ""))
+        for num in re.findall(r"\d[\d,]*\.?\d*", salary)
+    ]
+    if not numbers:
+        return None
+
+    uses_lpa_units = any(marker in salary for marker in ("lpa", "lac", "lakh", "lakhs", "lacs"))
+    monthly_markers = ("/month", "per month", "monthly", "month", "take home")
+    annual_markers = ("per annum", "/year", "annum", "pa", "yearly", "annual")
+
+    if uses_lpa_units:
+        annual_values = [num * 100000.0 for num in numbers]
+    elif any(marker in salary for marker in monthly_markers):
+        annual_values = [num * 12.0 for num in numbers]
+    elif any(marker in salary for marker in annual_markers):
+        annual_values = numbers
+    elif max(numbers) <= 100000.0:
+        annual_values = [num * 12.0 for num in numbers]
+    else:
+        annual_values = numbers
+
+    return min(annual_values) if annual_values else None
+
+
+def meets_minimum_salary_floor(raw_salary: str) -> bool:
+    annual_floor = estimate_annual_salary_floor(raw_salary)
+    if annual_floor is None:
+        return False
+    return annual_floor >= NAUKRI_MIN_SALARY_ANNUAL_INR
 
 
 def try_text(root, xpaths: list) -> str:
@@ -493,7 +606,15 @@ class NaukriScraper:
         self.user_agent           = random.choice(USER_AGENTS)
         self.driver               = None
         self._session_hashes: set = set()
+        self._session_job_urls: set = set()
+        self._existing_hashes: set = set()
+        self._existing_job_urls: set = set()
+        self._existing_keys_loaded = False
         self._first_query_done    = False
+        self.keep_background      = NAUKRI_KEEP_BACKGROUND_DEFAULT and not self.headless
+        self.allow_mouse_assist_in_background = (
+            NAUKRI_ALLOW_MOUSE_ASSIST_IN_BACKGROUND_DEFAULT and not self.headless
+        )
         self.mouse_assist_enabled = (
             NAUKRI_MOUSE_ASSIST_DEFAULT if mouse_assist is None else bool(mouse_assist)
         )
@@ -510,6 +631,23 @@ class NaukriScraper:
         profile_dir = os.path.join(os.path.expanduser("~"), "chrome_naukri_profile")
         os.makedirs(profile_dir, exist_ok=True)
 
+        if (
+            self.keep_background
+            and self.mouse_assist_enabled
+            and not self.allow_mouse_assist_in_background
+        ):
+            log.warning(
+                "Disabling Naukri mouse assist while background mode is enabled so you can keep using the PC."
+            )
+            self.mouse_assist_enabled = False
+        elif (
+            self.keep_background
+            and self.mouse_assist_enabled
+            and self.allow_mouse_assist_in_background
+        ):
+            log.warning(
+                "Naukri mouse assist is enabled even in background mode. The cursor may move while you work."
+            )
         if self.mouse_assist_enabled and self.headless:
             log.warning("Disabling Naukri mouse assist in headless mode.")
             self.mouse_assist_enabled = False
@@ -538,6 +676,11 @@ class NaukriScraper:
             opts.add_argument("--window-size=1440,900")
             opts.add_argument("--lang=en-US,en;q=0.9")
             opts.add_argument("--disable-blink-features=AutomationControlled")
+            if self.keep_background:
+                opts.add_argument("--start-minimized")
+                opts.add_argument("--disable-backgrounding-occluded-windows")
+                opts.add_argument("--disable-renderer-backgrounding")
+                opts.add_argument("--disable-background-timer-throttling")
 
             self.driver = uc.Chrome(options=opts, use_subprocess=True)
             self.driver.execute_script("""
@@ -546,17 +689,54 @@ class NaukriScraper:
                 Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
                 window.chrome = { runtime: {} };
             """)
+            self._minimize_browser_window()
 
             log.info("Naukri Chrome browser ready | profile: %s | UA: %s...", profile_dir, self.user_agent[:55])
         except Exception as e:
             log.error("Failed to start Naukri Chrome WebDriver: %s", e, exc_info=True)
             raise
 
+    def _minimize_browser_window(self):
+        if not self.keep_background or self.headless or self.driver is None:
+            return
+        try:
+            self.driver.minimize_window()
+            log.info("Naukri Chrome started minimized to keep scraping in the background.")
+        except Exception as exc:
+            log.debug("Could not minimize Naukri Chrome window: %s", exc)
+
     def _disable_mouse_assist(self, reason: str):
         if not self.mouse_assist_enabled:
             return
         self.mouse_assist_enabled = False
         log.warning("Naukri mouse assist disabled: %s", reason)
+
+    def _prime_existing_job_keys(self, collection):
+        if collection is None or self._existing_keys_loaded:
+            return
+
+        try:
+            cursor = collection.find(
+                {"source": "naukri"},
+                {"job_url": 1, "_id_hash": 1},
+            )
+            for document in cursor:
+                existing_url = normalize_job_url(str(document.get("job_url", "")).strip())
+                if existing_url:
+                    self._existing_job_urls.add(existing_url)
+
+                existing_hash = str(document.get("_id_hash", "")).strip()
+                if existing_hash:
+                    self._existing_hashes.add(existing_hash)
+
+            self._existing_keys_loaded = True
+            log.info(
+                "Primed %d stored Naukri URLs and %d hashes for pre-detail dedupe.",
+                len(self._existing_job_urls),
+                len(self._existing_hashes),
+            )
+        except Exception as exc:
+            log.warning("Could not preload existing Naukri dedupe keys: %s", exc)
 
     def _check_mouse_kill_switch(self) -> bool:
         if not self.mouse_assist_enabled or pyautogui is None:
@@ -627,6 +807,7 @@ class NaukriScraper:
             if tween is not None:
                 move_kwargs["tween"] = tween
             pyautogui.moveTo(target_x, target_y, **move_kwargs)
+            log.info("Mouse glide to %s -> (%d, %d)", label, target_x, target_y)
             if random.random() < 0.35:
                 pyautogui.moveRel(
                     random.randint(-4, 4),
@@ -641,11 +822,97 @@ class NaukriScraper:
                 return
             log.debug("Mouse glide skipped for %s: %s", label, exc)
 
+    def _reliable_click(self, element, label: str = "element", allow_js: bool = True) -> bool:
+        """
+        Perform a Selenium-first click with safe fallbacks.
+
+        Mouse movement is purely decorative here: it may glide toward the
+        target, but the actual interaction is always driven by Selenium so the
+        scraper continues to work even when mouse assist is disabled.
+        """
+        self._mouse_glide_to_element(element, label=label)
+
+        try:
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                element,
+            )
+        except Exception:
+            pass
+
+        click_attempts = []
+
+        try:
+            element.click()
+            log.info("Clicked %s via native click", label)
+            return True
+        except Exception as exc:
+            click_attempts.append(f"native click failed: {exc}")
+
+        try:
+            ActionChains(self.driver).move_to_element(element).pause(
+                random.uniform(0.05, 0.12)
+            ).click(element).perform()
+            log.info("Clicked %s via action chain", label)
+            return True
+        except Exception as exc:
+            click_attempts.append(f"action chain click failed: {exc}")
+
+        if allow_js:
+            try:
+                self.driver.execute_script("arguments[0].click();", element)
+                log.info("Clicked %s via JS fallback", label)
+                return True
+            except Exception as exc:
+                click_attempts.append(f"js click failed: {exc}")
+
+        log.debug("Reliable click failed for %s | %s", label, " | ".join(click_attempts))
+        return False
+
+    def _wait_for_any_element(
+        self,
+        xpaths: list[str],
+        timeout: float = ELEMENT_WAIT_TIMEOUT,
+        clickable: bool = False,
+        label: str = "element",
+    ):
+        log.info("Waiting for %s (timeout %.1fs)", label, timeout)
+
+        def locate(driver):
+            for xpath in xpaths:
+                try:
+                    elements = driver.find_elements(By.XPATH, xpath)
+                except Exception:
+                    continue
+
+                for element in elements:
+                    try:
+                        if clickable and not (element.is_displayed() and element.is_enabled()):
+                            continue
+                        if not clickable and not element.is_displayed():
+                            continue
+                        return element
+                    except Exception:
+                        continue
+            return False
+
+        try:
+            element = WebDriverWait(
+                self.driver,
+                timeout,
+                poll_frequency=0.25,
+            ).until(locate)
+            log.info("Found %s", label)
+            return element
+        except TimeoutException:
+            log.info("Timed out waiting for %s", label)
+            return None
+
     def _check_session(self):
         log.info("Navigating to Naukri homepage...")
         self.driver.get(NAUKRI_HOMEPAGE)
         log.info("Current URL after get(): %s", self.driver.current_url)
-        human_delay(3, 5)
+        human_delay()
         self._dismiss_overlays()
         try:
             user_el = self.driver.find_element(
@@ -663,111 +930,144 @@ class NaukriScraper:
     def _dismiss_overlays(self):
         for xpath in OVERLAY_CLOSE_XPATHS:
             try:
-                btn = WebDriverWait(self.driver, 2).until(
-                    EC.element_to_be_clickable((By.XPATH, xpath))
+                buttons = self.driver.find_elements(By.XPATH, xpath)
+                if not buttons:
+                    continue
+                btn = next(
+                    (
+                        element for element in buttons
+                        if element.is_displayed() and element.is_enabled()
+                    ),
+                    None,
                 )
-                self._mouse_glide_to_element(btn, label="overlay close button")
-                btn.click()
-                log.debug("Dismissed overlay via: %s", xpath[:60])
-                time.sleep(0.5)
+                if btn is None:
+                    continue
+                if self._reliable_click(btn, label="overlay close button"):
+                    log.info("Dismissed overlay via selector: %s", xpath[:60])
+                    time.sleep(0.5)
             except Exception:
                 continue
+
+    def _expand_homepage_search(self) -> bool:
+        el = self._wait_for_any_element(
+            SEARCHBAR_WRAPPER_XPATHS,
+            timeout=ELEMENT_WAIT_TIMEOUT,
+            clickable=True,
+            label="homepage search activator",
+        )
+        if el is None:
+            return False
+        if not self._reliable_click(el, label="homepage search activator"):
+            return False
+        human_delay()
+        expanded = self._wait_for_any_element(
+            SEARCHBAR_EXPANDED_XPATHS,
+            timeout=ELEMENT_WAIT_TIMEOUT,
+            clickable=False,
+            label="expanded homepage search",
+        )
+        return expanded is not None
+
+    def _select_job_type(self, employment_status: str) -> bool:
+        option_xpaths = (
+            INTERNSHIP_OPTION_XPATHS
+            if employment_status == "Intern"
+            else JOB_OPTION_XPATHS
+        )
+        option_label = "Internship" if employment_status == "Intern" else "Job"
+
+        dropdown = self._wait_for_any_element(
+            JOBTYPE_INPUT_XPATHS,
+            timeout=ELEMENT_WAIT_TIMEOUT,
+            clickable=True,
+            label="job-type dropdown",
+        )
+        if dropdown is None:
+            log.warning("Could not open job-type dropdown")
+            return False
+        if not self._reliable_click(dropdown, label="job-type dropdown"):
+            return False
+        human_delay()
+
+        option = self._wait_for_any_element(
+            option_xpaths,
+            timeout=ELEMENT_WAIT_TIMEOUT,
+            clickable=True,
+            label=f"{option_label} option",
+        )
+        if option is None:
+            log.warning("Could not select '%s' from dropdown", option_label)
+            return False
+        if not self._reliable_click(option, label=f"{option_label} option"):
+            return False
+        human_delay()
+        log.info("Selected Naukri job type: %s", option_label)
+        return True
 
     def _search_via_homepage(self, query: str) -> bool:
         log.info("Homepage search for: '%s'", query)
         try:
             employment_status = infer_employment_status_from_query(query)
             self.driver.get(NAUKRI_HOMEPAGE)
-            human_delay(3, 5)
+            human_delay()
             self._dismiss_overlays()
 
-            # Step 1 — activate search bar
-            for xpath in SEARCHBAR_WRAPPER_XPATHS:
-                try:
-                    el = WebDriverWait(self.driver, 8).until(
-                        EC.element_to_be_clickable((By.XPATH, xpath))
-                    )
-                    self._mouse_glide_to_element(el, label="homepage search bar")
-                    el.click()
-                    human_delay(0.5, 1.2)
-                    log.debug("Search bar activated")
-                    break
-                except Exception:
-                    continue
+            # Step 1 — click the collapsed search surface to open the expanded homepage search.
+            if not self._expand_homepage_search():
+                log.error("Could not expand homepage search surface")
+                return False
 
-            # Step 2/3 — only force the Internship job-type filter when the query is internship-like.
-            if employment_status == "Intern":
-                for xpath in JOBTYPE_INPUT_XPATHS:
-                    try:
-                        jt_input = WebDriverWait(self.driver, 6).until(
-                            EC.element_to_be_clickable((By.XPATH, xpath))
-                        )
-                        self._mouse_glide_to_element(jt_input, label="job-type dropdown")
-                        self.driver.execute_script("arguments[0].click();", jt_input)
-                        human_delay(0.5, 1.0)
-                        log.debug("Job-type dropdown opened")
-                        break
-                    except Exception:
-                        continue
+            # Step 2 — explicitly choose Internship or Job from the job-type dropdown.
+            self._select_job_type(employment_status)
 
-                internship_selected = False
-                for xpath in INTERNSHIP_OPTION_XPATHS:
-                    try:
-                        option = WebDriverWait(self.driver, 5).until(
-                            EC.element_to_be_clickable((By.XPATH, xpath))
-                        )
-                        self._mouse_glide_to_element(option, label="internship option")
-                        option.click()
-                        human_delay(0.4, 0.9)
-                        log.debug("'Internship' selected")
-                        internship_selected = True
-                        break
-                    except Exception:
-                        continue
-                if not internship_selected:
-                    log.warning("Could not select 'Internship' from dropdown — proceeding anyway")
-            else:
-                log.debug(
-                    "Leaving Naukri job-type unfiltered for '%s' query",
-                    employment_status,
-                )
-
-            # Step 4 — type keyword
-            kw_input = None
-            for xpath in KEYWORD_INPUT_XPATHS:
-                try:
-                    kw_input = WebDriverWait(self.driver, 6).until(
-                        EC.element_to_be_clickable((By.XPATH, xpath))
-                    )
-                    break
-                except Exception:
-                    continue
-
+            # Step 3 — type keyword
+            kw_input = self._wait_for_any_element(
+                KEYWORD_INPUT_XPATHS,
+                timeout=ELEMENT_WAIT_TIMEOUT,
+                clickable=True,
+                label="keyword input",
+            )
             if kw_input is None:
                 log.error("Keyword input not found on homepage")
                 return False
 
-            self._mouse_glide_to_element(kw_input, label="keyword input")
-            kw_input.click()
-            human_delay(0.3, 0.6)
+            if not self._reliable_click(kw_input, label="keyword input", allow_js=False):
+                log.error("Could not focus keyword input reliably")
+                return False
+            log.info("Typing query into keyword input: %s", query)
+            human_delay(0.5, 0.8)
             kw_input.send_keys(Keys.CONTROL + "a")
-            human_delay(0.1, 0.3)
+            human_delay(0.5, 0.8)
             kw_input.send_keys(Keys.DELETE)
-            human_delay(0.2, 0.5)
+            human_delay(0.5, 0.8)
 
             for char in query:
                 kw_input.send_keys(char)
                 time.sleep(random.uniform(0.04, 0.14))
 
-            human_delay(0.8, 1.5)
+            human_delay()
 
-            # Dismiss autocomplete then submit
+            # Dismiss autocomplete then submit via the actual Search button first.
             kw_input.send_keys(Keys.ESCAPE)
             time.sleep(0.3)
-            kw_input.send_keys(Keys.RETURN)
-            human_delay(3, 6)
 
-            # Step 5 — verify SRP loaded
+            search_clicked = False
+            btn = self._wait_for_any_element(
+                SEARCH_BTN_XPATHS,
+                timeout=ELEMENT_WAIT_TIMEOUT,
+                clickable=True,
+                label="search button",
+            )
+            if btn is not None and self._reliable_click(btn, label="search button"):
+                search_clicked = True
+                human_delay()
+
+            if not search_clicked:
+                kw_input.send_keys(Keys.RETURN)
+                log.info("Submitted search via Enter fallback")
+                human_delay()
+
+            # Step 4 — verify SRP loaded
             current_url = self.driver.current_url
             if "naukri.com" in current_url and (
                 "-jobs" in current_url or "?k=" in current_url
@@ -776,20 +1076,19 @@ class NaukriScraper:
                 self._first_query_done = True
                 return True
 
-            # Fallback: click search button
-            for xpath in SEARCH_BTN_XPATHS:
-                try:
-                    btn = self.driver.find_element(By.XPATH, xpath)
-                    self._mouse_glide_to_element(btn, label="search button")
-                    btn.click()
-                    human_delay(3, 5)
-                    break
-                except Exception:
-                    continue
+            # Fallback: if the button path did not navigate, try Enter once more.
+            try:
+                kw_input.send_keys(Keys.RETURN)
+                log.info("Retrying search via Enter fallback")
+                human_delay()
+            except Exception:
+                pass
 
             current_url = self.driver.current_url
-            if "naukri.com" in current_url and "-jobs" in current_url:
-                log.info("SRP loaded after button click: %s", current_url[:80])
+            if "naukri.com" in current_url and (
+                "-jobs" in current_url or "?k=" in current_url
+            ):
+                log.info("SRP loaded after fallback submit: %s", current_url[:80])
                 self._first_query_done = True
                 return True
 
@@ -814,10 +1113,12 @@ class NaukriScraper:
             if opened_new_tab and len(self.driver.window_handles) > 1:
                 self.driver.close()
                 self.driver.switch_to.window(self.driver.window_handles[0])
-                human_delay(0.8, 1.5)
+                log.info("Closed detail tab and returned to results")
+                human_delay()
             else:
                 self.driver.back()
-                human_delay(2, 3.5)
+                log.info("Returned to results page via browser back")
+                human_delay()
         except Exception:
             pass
 
@@ -854,7 +1155,8 @@ class NaukriScraper:
         """
         Navigate to full job detail page.
         Returns dict: description, salary, duration, location_detail.
-        Uses a new tab when possible so SRP state stays stable.
+        Uses a new tab when possible so SRP state stays stable. In background
+        mode, it stays in the same tab to avoid stealing focus while you work.
         """
         result = {
             "description": "",
@@ -869,29 +1171,35 @@ class NaukriScraper:
         opened_new_tab = False
 
         try:
-            opened_new_tab = self._open_in_new_tab(job_url)
+            if not self.keep_background:
+                opened_new_tab = self._open_in_new_tab(job_url)
             if not opened_new_tab:
                 self.driver.get(job_url)
+                log.info("Opened detail page in current tab: %s", job_url)
+            else:
+                log.info("Opened detail page in new tab: %s", job_url)
 
-            human_delay(2, 4)
+            human_delay()
             self._dismiss_overlays()
 
             ready = False
             for xpath in DETAIL_READY_XPATHS:
                 try:
-                    WebDriverWait(self.driver, 4).until(
+                    WebDriverWait(self.driver, ELEMENT_WAIT_TIMEOUT).until(
                         EC.presence_of_element_located((By.XPATH, xpath))
                     )
                     ready = True
+                    log.info("Detail page ready via selector: %s", xpath[:60])
                     break
                 except Exception:
                     continue
 
             if not ready:
-                log.debug("Detail page not clearly 'ready': %s", job_url)
+                log.info("Detail page not clearly ready yet: %s", job_url)
 
             slow_scroll(self.driver, pixels=1600)
-            human_delay(0.5, 1.0)
+            log.info("Scrolled detail page to expose metadata and description")
+            human_delay()
 
             # Location
             loc = try_text(self.driver, LOCATION_DETAIL_XPATHS)
@@ -936,9 +1244,9 @@ class NaukriScraper:
 
             if descriptions:
                 result["description"] = clean_multiline_text(max(descriptions, key=len))
-                log.debug("Description captured: %d chars", len(result["description"]))
+                log.info("Description captured: %d chars", len(result["description"]))
             else:
-                log.debug("No description found: %s", job_url)
+                log.info("No description found on detail page: %s", job_url)
 
         except Exception as e:
             log.warning("Detail fetch failed for %s: %s", job_url, e)
@@ -968,6 +1276,7 @@ class NaukriScraper:
 
             if job_url and job_url.startswith("/"):
                 job_url = NAUKRI_BASE + job_url
+            job_url = normalize_job_url(job_url)
 
             if not title:
                 return None
@@ -982,25 +1291,36 @@ class NaukriScraper:
             }
 
         except StaleElementReferenceException:
-            log.debug("Stale card element, skipping")
+            log.info("Stale card element encountered, skipping")
             return None
         except Exception as e:
-            log.debug("Card parse error: %s", e)
+            log.info("Card parse error: %s", e)
             return None
 
     def _wait_for_cards(self) -> list:
-        for xpath in CARD_XPATHS:
-            try:
-                WebDriverWait(self.driver, 12).until(
-                    EC.presence_of_element_located((By.XPATH, xpath))
-                )
-                cards = self.driver.find_elements(By.XPATH, xpath)
+        log.info("Waiting for result cards (timeout %.1fs)", CARD_WAIT_TIMEOUT)
+
+        def locate_cards(driver):
+            for xpath in CARD_XPATHS:
+                try:
+                    cards = driver.find_elements(By.XPATH, xpath)
+                except Exception:
+                    continue
                 if cards:
-                    log.debug("%d cards via %s", len(cards), xpath[:55])
-                    return cards
-            except TimeoutException:
-                continue
-        return []
+                    return xpath, cards
+            return False
+
+        try:
+            xpath, cards = WebDriverWait(
+                self.driver,
+                CARD_WAIT_TIMEOUT,
+                poll_frequency=0.25,
+            ).until(locate_cards)
+            log.info("Found %d result cards via selector: %s", len(cards), xpath[:70])
+            return cards
+        except TimeoutException:
+            log.info("Timed out waiting for result cards")
+            return []
 
     def scrape_query(
         self,
@@ -1032,14 +1352,15 @@ class NaukriScraper:
             url = build_srp_url(query=query, page=page_num)
             log.info("Opening SRP page %d | %s", page_num, url)
             self.driver.get(url)
-            human_delay(4, 7)
+            log.info("Loaded SRP URL, waiting briefly for initial paint")
+            human_delay()
 
             self._dismiss_overlays()
 
             # Fake some scrolling / mouse movement so the page fully loads
-            for _ in range(3):
-                slow_scroll(self.driver, pixels=random.randint(300, 700))
-                human_delay(1.0, 2.0)
+            slow_scroll(self.driver, pixels=random.randint(220, 420))
+            log.info("Performed initial SRP scroll to trigger lazy content")
+            human_delay()
 
             if random.random() < 0.2:
                 simulate_mouse(self.driver)
@@ -1058,36 +1379,121 @@ class NaukriScraper:
                 parsed = self._parse_card(card)
                 if parsed:
                     parsed_cards.append(parsed)
-            log.debug("%d valid cards on page %d", len(parsed_cards), page_num)
+            log.info("%d valid cards parsed on page %d", len(parsed_cards), page_num)
 
             new_this_page = 0
             for parsed in parsed_cards:
                 if len(jobs) >= max_jobs:
                     break
 
+                if not has_actionable_salary(parsed["salary"]):
+                    log.info(
+                        "Skipping card without actionable salary before detail open: %s @ %s | salary=%s",
+                        parsed["title"],
+                        parsed["company"],
+                        parsed["salary"] or "—",
+                    )
+                    continue
+
+                if not meets_minimum_salary_floor(parsed["salary"]):
+                    annual_floor = estimate_annual_salary_floor(parsed["salary"])
+                    log.info(
+                        "Skipping card below minimum salary floor before detail open: %s @ %s | salary=%s | annual_floor=%s",
+                        parsed["title"],
+                        parsed["company"],
+                        parsed["salary"] or "—",
+                        f"{annual_floor:,.0f}" if annual_floor is not None else "unknown",
+                    )
+                    continue
+
+                job_url_key = normalize_job_url(parsed["job_url"])
                 h = dedup_hash(parsed["title"], parsed["company"], parsed["location"])
-                if h in self._session_hashes:
+
+                if job_url_key and job_url_key in self._session_job_urls:
                     dupes += 1
-                    log.debug(
-                        "Duplicate: %s @ %s",
+                    log.info(
+                        "Session URL duplicate: %s @ %s",
                         parsed["title"],
                         parsed["company"],
                     )
                     continue
 
+                if h in self._session_hashes:
+                    dupes += 1
+                    log.info(
+                        "Session hash duplicate: %s @ %s",
+                        parsed["title"],
+                        parsed["company"],
+                    )
+                    continue
+
+                if job_url_key and job_url_key in self._existing_job_urls:
+                    dupes += 1
+                    self._session_job_urls.add(job_url_key)
+                    self._session_hashes.add(h)
+                    log.info(
+                        "Skipping already-stored Naukri URL: %s @ %s",
+                        parsed["title"],
+                        parsed["company"],
+                    )
+                    continue
+
+                if h in self._existing_hashes:
+                    dupes += 1
+                    if job_url_key:
+                        self._session_job_urls.add(job_url_key)
+                    self._session_hashes.add(h)
+                    log.info(
+                        "Skipping already-stored Naukri hash match: %s @ %s",
+                        parsed["title"],
+                        parsed["company"],
+                    )
+                    continue
+
+                log.info("Opening detail for card: %s @ %s", parsed["title"], parsed["company"])
                 human_delay(JOB_DELAY_MIN, JOB_DELAY_MAX)
                 detail = self._fetch_detail(parsed["job_url"])
 
                 location_final = detail["location_detail"] or parsed["location"]
                 salary_final   = detail["salary"]           or parsed["salary"]
                 duration_final = detail["duration"]         or parsed["duration"]
+                final_hash = dedup_hash(parsed["title"], parsed["company"], location_final)
+                final_job_url = normalize_job_url(parsed["job_url"])
+
+                if not has_actionable_salary(salary_final):
+                    dupes += 1
+                    if final_job_url:
+                        self._session_job_urls.add(final_job_url)
+                    self._session_hashes.add(final_hash)
+                    log.info(
+                        "Skipping Naukri job without actionable salary: %s @ %s | salary=%s",
+                        parsed["title"],
+                        parsed["company"],
+                        salary_final or "—",
+                    )
+                    continue
+
+                if not meets_minimum_salary_floor(salary_final):
+                    dupes += 1
+                    if final_job_url:
+                        self._session_job_urls.add(final_job_url)
+                    self._session_hashes.add(final_hash)
+                    annual_floor = estimate_annual_salary_floor(salary_final)
+                    log.info(
+                        "Skipping Naukri job below minimum salary floor: %s @ %s | salary=%s | annual_floor=%s",
+                        parsed["title"],
+                        parsed["company"],
+                        salary_final or "—",
+                        f"{annual_floor:,.0f}" if annual_floor is not None else "unknown",
+                    )
+                    continue
 
                 job = {
                     "title":         parsed["title"],
                     "company":       parsed["company"],
                     "location":      location_final,
                     "description":   detail["description"],
-                    "job_url":       parsed["job_url"],
+                    "job_url":       final_job_url,
                     "source":        "naukri",
                     "search_query":  query
                         or extract_query_from_url(self.driver.current_url),
@@ -1121,7 +1527,14 @@ class NaukriScraper:
                             exc_info=True,
                         )
 
-                self._session_hashes.add(h)
+                if final_job_url:
+                    self._session_job_urls.add(final_job_url)
+                self._session_hashes.add(final_hash)
+
+                if persistence_error is None and collection is not None:
+                    if final_job_url:
+                        self._existing_job_urls.add(final_job_url)
+                    self._existing_hashes.add(final_hash)
                 jobs.append(job)
                 new_this_page += 1
 
@@ -1163,7 +1576,8 @@ class NaukriScraper:
                 break
 
             page_num += 1
-            human_delay(2, 5)
+            log.info("Moving to next SRP page")
+            human_delay()
 
         log.info("Query '%s' done: %d collected | %d dupes skipped", query, len(jobs), dupes)
         return jobs
@@ -1178,6 +1592,7 @@ class NaukriScraper:
         persistence_stats: dict | None = None,
     ) -> pd.DataFrame:
         self._check_session()
+        self._prime_existing_job_keys(collection)
 
         query_list = build_query_list(
             selected_categories=selected_categories,

@@ -147,6 +147,13 @@
             siteNav.classList.add("nav-indicator-ready");
         }
 
+        function shouldRevealEarly(element) {
+            const rect = element.getBoundingClientRect();
+            const preloadOffset = Math.max(window.innerHeight * 0.18, 220);
+
+            return rect.top <= window.innerHeight + preloadOffset;
+        }
+
         if (prefersReducedMotion || !("IntersectionObserver" in window)) {
             motionTargets.forEach((element) => element.classList.add("motion-visible"));
         } else {
@@ -162,12 +169,19 @@
                     });
                 },
                 {
-                    threshold: 0.14,
-                    rootMargin: "0px 0px -8% 0px",
+                    threshold: 0.02,
+                    rootMargin: "0px 0px 18% 0px",
                 }
             );
 
-            motionTargets.forEach((element) => observer.observe(element));
+            motionTargets.forEach((element) => {
+                if (shouldRevealEarly(element)) {
+                    element.classList.add("motion-visible");
+                    return;
+                }
+
+                observer.observe(element);
+            });
         }
 
         syncNavIndicator();
